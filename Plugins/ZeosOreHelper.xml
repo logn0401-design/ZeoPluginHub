@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PluginData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
+  <Id>logn0401-design/ZeoPluginHub.ZeosOreHelper</Id>
+  <RepoId>logn0401-design/ZeoPluginHub</RepoId>
+  <FriendlyName>Zeo Ore Helper (Pulsar Test)</FriendlyName>
+  <Author>Zeo-Corps</Author>
+  <Tooltip>v0.7.2: ore search, SDX2 estimates and nearby deposit guidance.</Tooltip>
+  <Description>Core-style native menus, learned ore search and simple pings. Reads completed SDX2 client scan estimates; independently maps approximate ore deposits within 5 km. These are sampled estimates, not exact server quantities. Disable the old local ZeosOreHelper entry before enabling this version, then fully restart. Existing settings and learning are preserved. Windows/Pulsar Legacy only; in-game catalog verification pending.</Description>
+  <Runtimes>CLR</Runtimes>
+  <Platforms>Windows</Platforms>
+  <Commit>0ea9a5584c5ea00ec9db8191397c1903fc503091</Commit>
+  <SourceDirectories><Directory>loader/ZeosOreHelper/</Directory></SourceDirectories>
+  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/0.7.2/ZeosOreHelper.Runtime.dll" Sha256="0ebca81a2b1f41fe7e4de0a0bf92b22ce6f9da6a7c3c0aa528b6425b7725e4e0" Reference="true" />
+  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/0.7.2/ZeosOreOverlay.zip" Sha256="3ad587e6637ec22bc786bf9746e3ec498b968a30fa850d2f0187b5b82491ed4b" Extract="true" />
+</PluginData>
