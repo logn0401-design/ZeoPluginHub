@@ -679,8 +679,8 @@ namespace ZeoCore
                     HudTrack t = selected[i];
                     Vector2D screen;
                     bool offscreen;
-                    Vector3D renderPosition = t.Position;
-                    if (renderPredictionAge > 0) renderPosition += t.Velocity * renderPredictionAge;
+                    Vector3D renderPosition = MarkerPositionResolver.Resolve(t, _settings.MarkerAnchor,
+                        renderPredictionAge, _settings.StaleSeconds, LiveMarkerPosition);
                     Project(camera, renderPosition, out screen, out offscreen);
 
                     if (_settings.Declutter && !t.Focused && IsOccupied(screen))
@@ -709,6 +709,24 @@ namespace ZeoCore
                     });
                 }
             return markers;
+        }
+
+        private static readonly Func<long, Vector3D?> LiveMarkerPosition = ReadLiveMarkerPosition;
+
+        private static Vector3D? ReadLiveMarkerPosition(long entityId)
+        {
+            if (MyAPIGateway.Entities == null) return null;
+            try
+            {
+                IMyEntity entity;
+                if (!MyAPIGateway.Entities.TryGetEntityById(entityId, out entity) || entity == null || entity.Closed) return null;
+                IMyCubeGrid grid = entity as IMyCubeGrid;
+                var block = entity as IMyCubeBlock;
+                if (grid == null && block != null) grid = block.CubeGrid;
+                if (grid == null || grid.Closed) return null;
+                return grid.WorldAABB.Center;
+            }
+            catch { return null; }
         }
 
         private void PublishCameraMarkers()

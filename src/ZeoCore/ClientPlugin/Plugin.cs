@@ -8,7 +8,7 @@ namespace ZeoCore
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "V1.4g-PULSAR-CATALOG-TEST";
+        public const string Version = "V1.4h-LIVE-MARKER-LOCK";
         public static Plugin Instance { get; private set; }
 
         // Pulsar supplies the matching, hash-verified overlay before Init.

@@ -21,6 +21,7 @@ namespace ZeoOverlay
         private readonly OverlaySettings _settings;
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = 8 * 1024 * 1024 };
         private readonly object _frameLock = new object();
+        private readonly MarkerRenderWakeup _markerRenderWakeup = new MarkerRenderWakeup();
         private OverlayFrame _frame = new OverlayFrame();
         private OverlayMarkerUpdate _cameraMarkers;
         private long _lastFrameUtcMs;
@@ -155,6 +156,7 @@ namespace ZeoOverlay
                                 LogOverlay("First ZeoCore HUD frame received over localhost UDP. clientRect=" + packet.Frame.GameLeft + "," + packet.Frame.GameTop + " " + packet.Frame.GameWidth + "x" + packet.Frame.GameHeight + " focused=" + packet.Frame.GameFocused + " gamePid=" + packet.Frame.GameProcessId + " gameHwnd=0x" + packet.Frame.GameWindowHandle.ToString("X") + " markers=" + (packet.Frame.Markers == null ? 0 : packet.Frame.Markers.Count) + ".");
                             }
                         }
+                        RequestMarkerRender();
                     }
                     else if (string.Equals(packet.Kind,"markers",StringComparison.OrdinalIgnoreCase) && packet.MarkerUpdate!=null)
                     {
@@ -163,6 +165,7 @@ namespace ZeoOverlay
                             if (_cameraMarkers==null || packet.MarkerUpdate.Sequence>_cameraMarkers.Sequence)
                                 _cameraMarkers=packet.MarkerUpdate;
                         }
+                        RequestMarkerRender();
                     }
                     else if (string.Equals(packet.Kind, "command", StringComparison.OrdinalIgnoreCase))
                     {
@@ -177,6 +180,15 @@ namespace ZeoOverlay
                 catch (ObjectDisposedException) { break; }
                 catch { Thread.Sleep(25); }
             }
+        }
+
+        private void RequestMarkerRender()
+        {
+            if (!_settings.FastCameraMarkers || !_running || IsDisposed || !IsHandleCreated) return;
+            _markerRenderWakeup.Request(action => { BeginInvoke(action); }, delegate
+            {
+                if (_running && !IsDisposed) RenderTick();
+            });
         }
 
         private void SafeBegin(Action action)

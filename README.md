@@ -17,7 +17,15 @@ In Pulsar's plugin menu, open **Sources**. Under **Hubs**, choose **Add Remote H
 | Repo Name | ZeoPluginHub |
 | Branch Name | main |
 
-Apply the source changes and refresh if needed. The catalog contains **Zeo Core (Pulsar Test)** once the release descriptor is published.
+Apply the source changes and refresh if needed. The catalog contains **Zeo Core (Pulsar Test)**.
+
+## V1.4h tracking update
+
+Known, locally available ship tracks now read their current grid position on every marker projection instead of waiting for the slower track-building pass. Fast camera marker updates also wake the external overlay when fresh packets arrive. Detection-position mode, stale tracks and remote-only signals retain their existing fallback behavior; no nearest-ship snapping is introduced.
+
+For the first test, use **Home > SCOPE**: keep **Fast camera marker updates** ON, and enable **Smooth / predict track motion between sensor updates** for signals whose ships are not locally available. Leave the prediction limit at 1 second initially. Under MARKERS, use **Auto** or **Grid Center** anchoring. These preferences are not changed automatically. The separate external overlay still has some display latency; an exact render-synchronized lock is not claimed.
+
+Refresh Pulsar sources and fully restart to update. The old local Core entry should stay disabled. Confirm V1.4h in Core's version/debug output, then compare moving targets and camera panning.
 
 ## Existing manually installed Core users
 
