@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<PluginData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
+  <Id>logn0401-design/ZeoPluginHub.ZeoCore</Id>
+  <RepoId>logn0401-design/ZeoPluginHub</RepoId>
+  <FriendlyName>Zeo Core (Pulsar Test)</FriendlyName>
+  <Author>Zeo-Corps</Author>
+  <Tooltip>Native settings and tactical HUD; first Pulsar catalog test.</Tooltip>
+  <Description>V1.4g catalog test based on the V1.4f ammo HUD fix. Disable your old local ZeoCore entry before enabling this one. Full restart required. Includes the matching external overlay and preserves existing settings. Windows/Pulsar Legacy only. Existing open-test website transport is unchanged.</Description>
+  <Runtimes>CLR</Runtimes>
+  <Platforms>Windows</Platforms>
+  <Commit>7a528c3d766f037f32a92c112cf74d9593faec7a</Commit>
+  <SourceDirectories>
+    <Directory>loader/ZeoCore/</Directory>
+  </SourceDirectories>
+  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.4g/ZeoCore.Runtime.dll" Sha256="bf26362bb8a64414ccdee45939ef8554f53c8b054d9df51079d101e87d4d3711" Reference="true" />
+  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.4g/ZeoOverlay.zip" Sha256="d51a43d6d9d1e137691a8cdda22d4d22bab913a700a8ea60878d03a9a952ea88" Extract="true" />
+</PluginData>
