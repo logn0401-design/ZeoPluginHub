@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ZeosOreHelper</RootNamespace>
+    <AssemblyName>ZeosOreHelper.Runtime</AssemblyName>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyVersion>0.7.2.0</AssemblyVersion>
+    <FileVersion>0.7.2.0</FileVersion>
+    <Nullable>disable</Nullable>
+    <PathSeparator Condition="$([MSBuild]::IsOSPlatform('Windows'))">\</PathSeparator>
+    <PathSeparator Condition="!$([MSBuild]::IsOSPlatform('Windows'))">/</PathSeparator>
+    <_SteamAppInstallLocation Condition=" '$(Bin64)' == '' AND $([MSBuild]::IsOSPlatform('Windows')) ">$(registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 244850@InstallLocation)</_SteamAppInstallLocation>
+    <Bin64 Condition=" '$(Bin64)' == '' AND '$(_SteamAppInstallLocation)' != '' ">$(_SteamAppInstallLocation)\Bin64</Bin64>
+    <Bin64 Condition=" '$(Bin64)' == '' AND $([MSBuild]::IsOSPlatform('Windows')) AND Exists('C:\Program Files (x86)\Steam\steamapps\common\SpaceEngineers\Bin64') ">C:\Program Files (x86)\Steam\steamapps\common\SpaceEngineers\Bin64</Bin64>
+    <Bin64 Condition=" '$(Bin64)' == '' AND $([MSBuild]::IsOSPlatform('Windows')) AND Exists('C:\Program Files\Steam\steamapps\common\SpaceEngineers\Bin64') ">C:\Program Files\Steam\steamapps\common\SpaceEngineers\Bin64</Bin64>
+    <Bin64Dir>$(Bin64)</Bin64Dir>
+    <Bin64Dir Condition=" '$(Bin64Dir)' != '' AND !HasTrailingSlash('$(Bin64Dir)') ">$(Bin64Dir)$(PathSeparator)</Bin64Dir>
+  </PropertyGroup>
+  <Target Name="CheckBin64" BeforeTargets="ResolveReferences">
+    <Error Condition=" '$(Bin64)' == '' " Text="Space Engineers Bin64 was not found. Build with -p:Bin64=&quot;X:\...\SpaceEngineers\Bin64&quot;" />
+    <Error Condition=" !Exists('$(Bin64)') " Text="Configured Bin64 does not exist: $(Bin64)" />
+    <Error Condition=" !Exists('$(Bin64Dir)Sandbox.Game.dll') " Text="Sandbox.Game.dll was not found under configured Bin64: $(Bin64Dir)" />
+  </Target>
+  <ItemGroup>
+    <Reference Include="ProtoBuf.Net"><HintPath>$(Bin64Dir)ProtoBuf.Net.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="ProtoBuf.Net.Core"><HintPath>$(Bin64Dir)ProtoBuf.Net.Core.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Sandbox.Common"><HintPath>$(Bin64Dir)Sandbox.Common.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Sandbox.Game"><HintPath>$(Bin64Dir)Sandbox.Game.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Sandbox.Graphics"><HintPath>$(Bin64Dir)Sandbox.Graphics.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="SpaceEngineers.Game"><HintPath>$(Bin64Dir)SpaceEngineers.Game.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="VRage"><HintPath>$(Bin64Dir)VRage.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="VRage.Game"><HintPath>$(Bin64Dir)VRage.Game.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="VRage.Input"><HintPath>$(Bin64Dir)VRage.Input.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="VRage.Library"><HintPath>$(Bin64Dir)VRage.Library.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="VRage.Math"><HintPath>$(Bin64Dir)VRage.Math.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="VRage.Render"><HintPath>$(Bin64Dir)VRage.Render.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+<ItemGroup><Compile Include="../Shared/*.cs" /></ItemGroup><ItemGroup><Compile Include="../ZeosOreOverlay/OreOverlaySettings.cs" Link="OreOverlaySettings.cs" /></ItemGroup></Project>

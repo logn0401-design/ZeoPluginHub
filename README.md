@@ -1,6 +1,6 @@
 # Zeo Plugins for Pulsar
 
-First catalog candidate: **Zeo Core V1.4g — Pulsar distribution test**, based on the V1.4f ammo HUD fix. Zeo Nav and Zeo Ore Helper are not included yet.
+First catalog candidate: **Zeo Core V1.4g — Pulsar distribution test**, based on the V1.4f ammo HUD fix. **Zeo Ore Helper v0.7.2** is also available as a Pulsar test entry. Zeo Nav is not included yet.
 
 This is a test release. Local build and packaging checks do not replace an in-game test. It retains the existing open-test Battle Manager networking; it is not the proposed backend security upgrade.
 
@@ -17,7 +17,7 @@ In Pulsar's plugin menu, open **Sources**. Under **Hubs**, choose **Add Remote H
 | Repo Name | ZeoPluginHub |
 | Branch Name | main |
 
-Apply the source changes and refresh if needed. The catalog contains **Zeo Core (Pulsar Test)**.
+Apply the source changes and refresh if needed. The catalog contains **Zeo Core (Pulsar Test)** and **Zeo Ore Helper (Pulsar Test)**.
 
 ## V1.4h tracking update
 
@@ -44,3 +44,11 @@ The compiled runtime and overlay are cached by Pulsar. Persistent settings remai
 ## Maintainers
 
 See [release procedure](docs/RELEASING.md). Only publish tested, commit-pinned descriptors. Source changes alone do not rebuild the supplied Core runtime: rebuild both components, replace the assets, and refresh their hashes as part of every release.
+
+## Zeo Ore Helper v0.7.2
+
+Enable **Zeo Ore Helper (Pulsar Test)**, then fully restart. Before switching from the universal installer, disable the old local **ZeosOreHelper** entry and close its overlay. Do not run both versions together. Settings, ore selections, HUD positions, cached asteroids and learned baselines remain under `%APPDATA%/Pulsar/ZeosOreHelper`.
+
+Open the menu with PageUp (or your saved key), select ores, and START SEARCH. The helper still starts OFF each launch. SDX2 completed client scan estimates are optional under LEARNING; nearby deposit guidance is under PINGS. The deposit range defaults to 5 km, with four deposit markers inside your total ping cap. SDX2's inspected server API does not supply exact quantities: these are sampled client estimates. Full feature notes and limitations: [Ore Helper guide](docs/ORE_HELPER.md).
+
+Pulsar downloads the paired runtime and overlay with SHA-256 verification. No manual installer or SDK is needed. Refresh sources and restart for updates. For rollback, disable this catalog entry and re-enable your prior local version; keep the settings folder. Catalog loading and live deposit alignment still need in-game verification.
