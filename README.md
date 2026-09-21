@@ -1,16 +1,16 @@
-# Zeo Plugins for Pulsar
+# Zeo Plugins
 
-Available: **Zeo Core V1.4h**, **Zeo Nav v0.1.23**, and **Zeo Ore Helper v0.7.2** for Pulsar Legacy on Windows.
+Zeo plugins for Space Engineers 1 on Windows with Pulsar Legacy.
 
-For navigation, installation and migration instructions, see [Zeo Nav](docs/ZEO-NAV.md).
+| Plugin | Public release | Purpose |
+| --- | --- | --- |
+| Zeo Core | 1.0 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
+| Zeo Nav | 1.0 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
+| Zeo Ore Helper | 1.0 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
 
-This is a test release. Local build and packaging checks do not replace an in-game test. It retains the existing open-test Battle Manager networking; it is not the proposed backend security upgrade.
+## Add the catalog
 
-## Add this catalog
-
-Use Pulsar **2.4.2 or later**, **Legacy**, on Windows with Space Engineers 1. Add `-sources` to your existing Pulsar Steam launch options, then restart.
-
-In Pulsar's plugin menu, open **Sources**. Under **Hubs**, choose **Add Remote Hub**:
+Use Pulsar Legacy 2.4.2 or later on Windows. Add `-sources` to your existing Pulsar Steam launch options and restart. In Pulsar, open **Sources > Hubs > Add Remote Hub**:
 
 | Field | Value |
 | --- | --- |
@@ -19,38 +19,21 @@ In Pulsar's plugin menu, open **Sources**. Under **Hubs**, choose **Add Remote H
 | Repo Name | ZeoPluginHub |
 | Branch Name | main |
 
-Apply the source changes and refresh if needed. The catalog contains **Zeo Core (Pulsar Test)**, **Zeo Nav (Pulsar Test)** and **Zeo Ore Helper (Pulsar Test)**.
+Apply and refresh sources. Enable **Zeo Core**, **Zeo Nav** or **Zeo Ore Helper**, then fully restart. Disable any older local entry for the same plugin before enabling its catalog entry. Keep your existing settings folders.
 
-## V1.4h tracking update
+## Updating
 
-Known, locally available ship tracks now read their current grid position on every marker projection instead of waiting for the slower track-building pass. Fast camera marker updates also wake the external overlay when fresh packets arrive. Detection-position mode, stale tracks and remote-only signals retain their existing fallback behavior; no nearest-ship snapping is introduced.
+Close Space Engineers and all Zeo overlays before refreshing and restarting. A leftover overlay process can lock files in Pulsar's cache and prevent an update. Pulsar checks source metadata at startup, subject to cache age, or when sources are explicitly refreshed. Updates load after a full restart.
 
-For the first test, use **Home > SCOPE**: keep **Fast camera marker updates** ON, and enable **Smooth / predict track motion between sensor updates** for signals whose ships are not locally available. Leave the prediction limit at 1 second initially. Under MARKERS, use **Auto** or **Grid Center** anchoring. These preferences are not changed automatically. The separate external overlay still has some display latency; an exact render-synchronized lock is not claimed.
+Plugin IDs, settings locations and working runtime assets are preserved by this 1.0 naming release. The public release number is 1.0; internal build identifiers currently remain Core V1.4h, Nav v0.1.23 and Ore Helper v0.7.2. These are the same runtime builds, not a functional replacement or a completed backend security migration.
 
-Refresh Pulsar sources and fully restart to update. The old local Core entry should stay disabled. Confirm V1.4h in Core's version/debug output, then compare moving targets and camera panning.
+## Feature notes
 
-## Existing manually installed Core users
-
-Before the first switch, close the game and overlay and back up `%APPDATA%/Pulsar/ZeoCore` and your Pulsar profiles. In Pulsar, disable the old local Core entry before enabling the catalog version. Leave your existing configuration and HUD layout files in place; the catalog version uses the same data folder. Never enable both entries together. Restart the game completely.
-
-If rolling back, disable the catalog entry, re-enable your previous local Core entry, and restart. Keep the previous universal installer available. Do not delete the ZeoCore settings folder.
-
-## Updates
-
-Pulsar checks source metadata at startup, subject to its cache age (normally two hours), or when sources are explicitly refreshed. Changes to the pinned source commit or declared assets invalidate its plugin cache. Restart to load the new release; updates do not replace code in a running game.
-
-The repository contains a small Pulsar entry point, the full Core/overlay source, a compiled Core runtime dependency, and a matching overlay archive. Pulsar verifies SHA-256 hashes for both runtime assets. This preserves Core's existing .NET Framework serializer instead of replacing it for the catalog.
-
-The compiled runtime and overlay are cached by Pulsar. Persistent settings remain in `%APPDATA%/Pulsar/ZeoCore`. No game DLLs, credentials, player payloads, or machine-specific configuration files are distributed here.
+- **Core:** Includes configurable draggable HUD panels and a native Zeo settings menu. Locally available tracked ships use live position anchors; remote-only tracks still depend on telemetry and prediction. The external overlay has some display latency. Battle Manager sharing requires compatible telemetry and configuration; the existing open-test sharing endpoints have not yet completed the authenticated migration.
+- **Nav:** Includes the matching external HUD, Epstein main-drive support and own-ship Spectrum signature information. Spectrum features require compatible world/server telemetry. See [Zeo Nav guide](docs/ZEO-NAV.md).
+- **Ore Helper:** Search starts off each launch. Nearby deposit guidance defaults to 5 km. Ore quantities are sampled estimates, not exact server totals. Existing selections, HUD positions and learned data are preserved. See [Ore Helper guide](docs/ORE_HELPER.md).
+- **PDC:** Distributed separately as a local package. Its 1.0 rebrand and rebuilt installer are pending; this catalog does not yet install it. Its bank-queue planner remains observational and is not a completed replacement for native target control.
 
 ## Maintainers
 
-See [release procedure](docs/RELEASING.md). Only publish tested, commit-pinned descriptors. Source changes alone do not rebuild the supplied Core runtime: rebuild both components, replace the assets, and refresh their hashes as part of every release.
-
-## Zeo Ore Helper v0.7.2
-
-Enable **Zeo Ore Helper (Pulsar Test)**, then fully restart. Before switching from the universal installer, disable the old local **ZeosOreHelper** entry and close its overlay. Do not run both versions together. Settings, ore selections, HUD positions, cached asteroids and learned baselines remain under `%APPDATA%/Pulsar/ZeosOreHelper`.
-
-Open the menu with PageUp (or your saved key), select ores, and START SEARCH. The helper still starts OFF each launch. SDX2 completed client scan estimates are optional under LEARNING; nearby deposit guidance is under PINGS. The deposit range defaults to 5 km, with four deposit markers inside your total ping cap. SDX2's inspected server API does not supply exact quantities: these are sampled client estimates. Full feature notes and limitations: [Ore Helper guide](docs/ORE_HELPER.md).
-
-Pulsar downloads the paired runtime and overlay with SHA-256 verification. No manual installer or SDK is needed. Refresh sources and restart for updates. For rollback, disable this catalog entry and re-enable your prior local version; keep the settings folder. Catalog loading and live deposit alignment still need in-game verification.
+See the [release procedure](docs/RELEASING.md). Keep descriptors commit-pinned and verify asset SHA-256 hashes. Rebuild matching runtime and overlay assets when changing compiled code; source edits alone do not update supplied binaries. No game DLLs, credentials, player payloads or machine-specific settings belong in this repository.
