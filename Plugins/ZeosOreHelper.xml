@@ -2,10 +2,10 @@
 <PluginData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
   <Id>logn0401-design/ZeoPluginHub.ZeosOreHelper</Id>
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
-  <FriendlyName>Zeo Ore Helper (Pulsar Test)</FriendlyName>
+  <FriendlyName>Zeo Ore Helper</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>v0.7.2: ore search, SDX2 estimates and nearby deposit guidance.</Tooltip>
-  <Description>Core-style native menus, learned ore search and simple pings. Reads completed SDX2 client scan estimates; independently maps approximate ore deposits within 5 km. These are sampled estimates, not exact server quantities. Disable the old local ZeosOreHelper entry before enabling this version, then fully restart. Existing settings and learning are preserved. Windows/Pulsar Legacy only; in-game catalog verification pending.</Description>
+  <Tooltip>1.0 — Learned ore search, scan estimates and deposit guidance.</Tooltip>
+  <Description>Zeo Ore Helper 1.0 helps locate ores with learned search data, configurable pings, optional SDX2 client scan estimates, and approximate nearby deposit guidance within 5 km. Includes the native Zeo settings menu and external HUD. Quantities are sampled estimates, not exact server totals. The search starts off each launch. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
   <Commit>0ea9a5584c5ea00ec9db8191397c1903fc503091</Commit>

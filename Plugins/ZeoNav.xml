@@ -2,10 +2,10 @@
 <PluginData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
   <Id>logn0401-design/ZeoPluginHub.ZeoNav</Id>
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
-  <FriendlyName>Zeo Nav (Pulsar Test)</FriendlyName>
+  <FriendlyName>Zeo Nav</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>v0.1.23: precision attitude, Epstein main drives, 750 KM MAX SIG.</Tooltip>
-  <Description>GPS navigation with own-ship Spectrum MAX SIG, speed control, flip-and-burn and the compact Zeo menu. Includes the matching external HUD. Requires compatible Spectrum telemetry in the world/server. Disable any old local Zeo Nav entry before enabling this catalog version; keep your existing settings. Refresh sources and fully restart to update.</Description>
+  <Tooltip>1.0 — GPS navigation, speed control and flip-and-burn guidance.</Tooltip>
+  <Description>Zeo Nav 1.0 provides GPS navigation, speed control, flip-and-burn guidance, precision attitude controls, Epstein main-drive support, and a compact navigation HUD with the native Zeo settings menu. Own-ship Spectrum signature information requires compatible world/server telemetry. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
   <Commit>d5e50868173d7ed34001ec5e4466ac1cebe5e118</Commit>

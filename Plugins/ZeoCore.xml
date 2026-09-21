@@ -2,10 +2,10 @@
 <PluginData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
   <Id>logn0401-design/ZeoPluginHub.ZeoCore</Id>
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
-  <FriendlyName>Zeo Core (Pulsar Test)</FriendlyName>
+  <FriendlyName>Zeo Core</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>V1.4h: live ship anchors and faster marker redraws.</Tooltip>
-  <Description>V1.4h live marker lock test. Existing locally available ships use current positions at every marker projection. Fast camera updates also wake the overlay on fresh packets. Sensor-only tracks retain the prediction option. Disable the old local ZeoCore entry, refresh sources and fully restart. Settings are preserved. Windows/Pulsar Legacy only.</Description>
+  <Tooltip>1.0 — Tactical HUD, ship status and shared fleet contacts.</Tooltip>
+  <Description>Zeo Core 1.0 brings tactical ship markers, the TOS scope, ship and ammunition status, a friendly fleet roster, Battle Manager contact sharing, and a configurable HUD with draggable panels. Includes the native Zeo settings menu and matching external overlay. Windows / Pulsar Legacy. Sharing requires compatible server telemetry and Battle Manager settings.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
   <Commit>3e746a3f1ec857ae3c1878a95f4355ead878e422</Commit>
