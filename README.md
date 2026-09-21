@@ -1,6 +1,8 @@
 # Zeo Plugins for Pulsar
 
-First catalog candidate: **Zeo Core V1.4g — Pulsar distribution test**, based on the V1.4f ammo HUD fix. **Zeo Ore Helper v0.7.2** is also available as a Pulsar test entry. Zeo Nav is not included yet.
+Available: **Zeo Core V1.4h**, **Zeo Nav v0.1.23**, and **Zeo Ore Helper v0.7.2** for Pulsar Legacy on Windows.
+
+For navigation, installation and migration instructions, see [Zeo Nav](docs/ZEO-NAV.md).
 
 This is a test release. Local build and packaging checks do not replace an in-game test. It retains the existing open-test Battle Manager networking; it is not the proposed backend security upgrade.
 
@@ -17,7 +19,7 @@ In Pulsar's plugin menu, open **Sources**. Under **Hubs**, choose **Add Remote H
 | Repo Name | ZeoPluginHub |
 | Branch Name | main |
 
-Apply the source changes and refresh if needed. The catalog contains **Zeo Core (Pulsar Test)** and **Zeo Ore Helper (Pulsar Test)**.
+Apply the source changes and refresh if needed. The catalog contains **Zeo Core (Pulsar Test)**, **Zeo Nav (Pulsar Test)** and **Zeo Ore Helper (Pulsar Test)**.
 
 ## V1.4h tracking update
 

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>ZeoNav.Runtime</AssemblyName>
+    <RootNamespace>ZeoNav</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyVersion>0.1.23.0</AssemblyVersion>
+    <FileVersion>0.1.23.0</FileVersion>
+  </PropertyGroup>
+  <Target Name="ValidateBin64Dir" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(Bin64Dir)' == ''" Text="Bin64Dir MSBuild property was not supplied." />
+    <Error Condition="!Exists('$(Bin64Dir)\Sandbox.Game.dll')" Text="Bin64Dir does not resolve Sandbox.Game.dll: $(Bin64Dir)" />
+  </Target>
+  <ItemGroup>
+    <Reference Include="Sandbox.Graphics"><HintPath>$(Bin64Dir)\Sandbox.Graphics.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="VRage.Render"><HintPath>$(Bin64Dir)\VRage.Render.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Sandbox.Common"><HintPath>$(Bin64Dir)\Sandbox.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Sandbox.Game"><HintPath>$(Bin64Dir)\Sandbox.Game.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="SpaceEngineers.Game"><HintPath>$(Bin64Dir)\SpaceEngineers.Game.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="VRage"><HintPath>$(Bin64Dir)\VRage.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="VRage.Game"><HintPath>$(Bin64Dir)\VRage.Game.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="VRage.Library"><HintPath>$(Bin64Dir)\VRage.Library.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="VRage.Math"><HintPath>$(Bin64Dir)\VRage.Math.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="VRage.Input"><HintPath>$(Bin64Dir)\VRage.Input.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ProtoBuf.Net"><HintPath>$(Bin64Dir)\ProtoBuf.Net.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ProtoBuf.Net.Core"><HintPath>$(Bin64Dir)\ProtoBuf.Net.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+</Project>
+
+
