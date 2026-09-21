@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Core (Pulsar Test)</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>Native settings and tactical HUD; first Pulsar catalog test.</Tooltip>
-  <Description>V1.4g catalog test based on the V1.4f ammo HUD fix. Disable your old local ZeoCore entry before enabling this one. Full restart required. Includes the matching external overlay and preserves existing settings. Windows/Pulsar Legacy only. Existing open-test website transport is unchanged.</Description>
+  <Tooltip>V1.4h: live ship anchors and faster marker redraws.</Tooltip>
+  <Description>V1.4h live marker lock test. Existing locally available ships use current positions at every marker projection. Fast camera updates also wake the overlay on fresh packets. Sensor-only tracks retain the prediction option. Disable the old local ZeoCore entry, refresh sources and fully restart. Settings are preserved. Windows/Pulsar Legacy only.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>7a528c3d766f037f32a92c112cf74d9593faec7a</Commit>
+  <Commit>3e746a3f1ec857ae3c1878a95f4355ead878e422</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoCore/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.4g/ZeoCore.Runtime.dll" Sha256="bf26362bb8a64414ccdee45939ef8554f53c8b054d9df51079d101e87d4d3711" Reference="true" />
-  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.4g/ZeoOverlay.zip" Sha256="d51a43d6d9d1e137691a8cdda22d4d22bab913a700a8ea60878d03a9a952ea88" Extract="true" />
+  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.4h/ZeoCore.Runtime.dll" Sha256="2af8b7052ceac275d872fae3d4d398dca0c91f11fde2197e1db8567d38309450" Reference="true" />
+  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.4h/ZeoOverlay.zip" Sha256="ebf5f6362f60702dbe2a02bb742fa03b8604f12101ed27cd1c16cbf675b7e648" Extract="true" />
 </PluginData>
