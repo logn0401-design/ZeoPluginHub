@@ -4,7 +4,7 @@ Zeo plugins for Space Engineers 1 on Windows with Pulsar Legacy.
 
 | Plugin | Public release | Purpose |
 | --- | --- | --- |
-| Zeo Core | 1.0 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
+| Zeo Core | 1.0.1 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
 | Zeo Nav | 1.0 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
 | Zeo Ore Helper | 1.0 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
 
@@ -37,3 +37,11 @@ Plugin IDs, settings locations and working runtime assets are preserved by this 
 ## Maintainers
 
 See the [release procedure](docs/RELEASING.md). Keep descriptors commit-pinned and verify asset SHA-256 hashes. Rebuild matching runtime and overlay assets when changing compiled code; source edits alone do not update supplied binaries. No game DLLs, credentials, player payloads or machine-specific settings belong in this repository.
+
+## Zeo Core 1.0.1 — saved distress GPS
+
+Active distress locations received from any sector now save to the normal Space Engineers GPS list, with Show on HUD off initially. Names include the reporting sector. Refreshes update existing points rather than duplicating them; points stay saved when a call ends. Zeo Nav can read these hidden GPS entries. This does not start navigation automatically or change sector travel mechanics.
+
+Uses the existing main Zeo Core catalog entry; the separate inventory candidate is not included. Refresh Pulsar sources and fully restart the game. Keep only the main Zeo Core enabled.
+
+Core and overlay builds, 25 GPS lifecycle/API-adapter tests and the installed Pulsar entry-point compiler passed. Multiplayer save/rejoin, sector transfer and NavOS runtime behavior still need in-game verification. Full details are in docs/DISTRESS_GPS_1.0.1.md.

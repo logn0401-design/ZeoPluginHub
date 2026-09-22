@@ -51,6 +51,7 @@ namespace ZeoCore
         private int _lastMenuKeyFrame = -100000;
         private string _lastSectorId = "";
         private readonly DistressSender _distress;
+        private readonly DistressGpsBridge _distressGps = new DistressGpsBridge();
         private int _distressHoldStartFrame = -1;
         private bool _distressTriggeredThisHold;
         private bool _localDistressActive;
@@ -101,7 +102,7 @@ namespace ZeoCore
         {
             var session = MyAPIGateway.Session;
             if (session == null || MyAPIGateway.Utilities == null)
-                return;
+            { _distressGps.Reset(); return; }
 
             int frame;
             try { frame = session.GameplayFrameCounter; }
@@ -150,6 +151,8 @@ namespace ZeoCore
                     (MyAPIGateway.Session?.Player?.IdentityId ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture));
             else if (_fleet != null)
                 _fleet.ClearForTrustGate("RX OFF");
+
+            _distressGps.Update(_fleet, _settings.ReceiveFleetLink, _engine.GetLocalFactionTag());
 
             if (frame < _lastSpectrumFrame || frame - _lastSpectrumFrame >= 10)
             {

@@ -7,8 +7,8 @@
     <LangVersion>latest</LangVersion>
     <PlatformTarget>x64</PlatformTarget>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <AssemblyVersion>1.4.7.0</AssemblyVersion>
-    <FileVersion>1.4.7.0</FileVersion>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
     <Nullable>disable</Nullable>
 
     <PathSeparator Condition="$([MSBuild]::IsOSPlatform('Windows'))">\</PathSeparator>
