@@ -8,7 +8,7 @@ namespace ZeoCore
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.0.1-DISTRESS-GPS";
+        public const string Version = "1.0.2-HUD-RESIZE";
         public static Plugin Instance { get; private set; }
 
         // Pulsar supplies the matching, hash-verified overlay before Init.
@@ -29,6 +29,10 @@ namespace ZeoCore
 
         private ZeoCoreEngine _engine;
         private ZeoHudController _hud;
+        private readonly QuickRefillController _refill = new QuickRefillController();
+        internal static bool RefillActive { get { return Instance?._refill.Active ?? false; } }
+        internal static string RefillStatus { get { return Instance?._refill.Status ?? "Start a world to use Quick Refill."; } }
+        internal static void ToggleRefill() { if(Instance!=null) Instance._refill.Toggle(Instance._engine?.GetHudSnapshot()); }
         private bool _runtimeReadyNotified;
 
         internal static readonly string DataDirectory = Path.Combine(
@@ -59,6 +63,7 @@ namespace ZeoCore
 
         public void Update()
         {
+            _refill.Update();
             try
             {
                 if (_engine == null) _engine = new ZeoCoreEngine();
@@ -98,6 +103,7 @@ namespace ZeoCore
 
         public void Dispose()
         {
+            try { _refill.Dispose(); } catch { }
             try { if (_hud != null) _hud.Dispose(); } catch { }
             try { if (_engine != null) _engine.Dispose(); } catch { }
             _hud = null;

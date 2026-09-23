@@ -85,6 +85,8 @@ namespace ZeoCore
         {
             bool result=base.Update(hasFocus);
             if (_rebuild && !_building) { _rebuild=false; BuildControls(); }
+            if(_status!=null && ZeoNativeCatalog.Pages[_page]=="AMMO")
+                _status.Text=Short((Plugin.RefillActive ? "REFILLING: " : "")+Plugin.RefillStatus,108);
             return result;
         }
         public override bool CloseScreen(bool isUnloading=false)
@@ -134,9 +136,14 @@ namespace ZeoCore
                 Button(-0.325f,0.327f,0.195f,0.043f,"PREVIOUS",delegate { Navigate(-1); },0.62f).Enabled=view>0;
                 Button(0.325f,0.327f,0.195f,0.043f,"NEXT",delegate { Navigate(1); },0.62f).Enabled=view+1<views;
                 if(ZeoNativeCatalog.Pages[_page]=="LAYOUT")
-                    Button(0,0.327f,0.390f,0.043f,"EDIT HUD POSITIONS",delegate {
+                    Button(0,0.327f,0.390f,0.043f,"EDIT HUD LAYOUT",delegate {
                         if(!CommitEditors()) return;
                         if(CloseScreen()) ZeoNativeSettingsUi.BeginLayout(_changed,_ensureOverlay);
+                    },0.62f);
+                if(ZeoNativeCatalog.Pages[_page]=="AMMO")
+                    Button(0,0.327f,0.390f,0.043f,"QUICK REFILL / CANCEL",delegate {
+                        if(!CommitEditors())return;
+                        Plugin.ToggleRefill();
                     },0.62f);
                 Label(-0.421f,0.365f,HintForPage(),0.53f);
                 _status=Label(-0.421f,0.387f,Short(_message,108),0.50f);
@@ -151,8 +158,9 @@ namespace ZeoCore
             if(page=="FLEET") return "NETWORK / SHARING: local sensors stay active; shared data depends on the server.";
             if(page=="CAPTURE" || page=="PRIVACY") return "Capture exclusion covers the external HUD and legacy menu. This native menu is visible in capture.";
             if(page=="THEME") return "PICK opens native RGB controls. Menu colors style the legacy window; this menu keeps SE styling.";
-            if(page=="LAYOUT") return "EDIT HUD POSITIONS opens drag placement. NEXT opens numeric sizes, positions and marker limits.";
+            if(page=="LAYOUT") return "EDIT HUD LAYOUT opens move and width / height resize. NEXT opens numeric sizes, positions and marker limits.";
             if(page=="SCOPE") return "Prediction and visual smoothing are separate. Existing tracking behavior is preserved.";
+            if(page=="AMMO") return "Dock to refill tanks and ammo WANT deficits. Relevant-only applies; ammo needs connected ship cargo.";
             return "Hover a setting for details. ESC or the configured menu key returns to the game.";
         }
         private void Navigate(int delta)

@@ -227,8 +227,34 @@ namespace ZeoOverlay
             catch { }
         }
 
+        public double ShipHudWidth { get; set; } = 1;
+        public double ShipHudHeight { get; set; } = 1;
+        public double ScopeHudWidth { get; set; } = 1;
+        public double ScopeHudHeight { get; set; } = 1;
+        public double FleetHudWidth { get; set; } = 1;
+        public double FleetHudHeight { get; set; } = 1;
+        public double AmmoHudWidth { get; set; } = 1;
+        public double AmmoHudHeight { get; set; } = 1;
+        public double RosterHudWidth { get; set; } = 1;
+        public double RosterHudHeight { get; set; } = 1;
+        public double DistressHudWidth { get; set; } = 1;
+        public double DistressHudHeight { get; set; } = 1;
+
         private sealed class UiExtension
         {
+        public double ShipHudWidth { get; set; } = 1;
+        public double ShipHudHeight { get; set; } = 1;
+        public double ScopeHudWidth { get; set; } = 1;
+        public double ScopeHudHeight { get; set; } = 1;
+        public double FleetHudWidth { get; set; } = 1;
+        public double FleetHudHeight { get; set; } = 1;
+        public double AmmoHudWidth { get; set; } = 1;
+        public double AmmoHudHeight { get; set; } = 1;
+        public double RosterHudWidth { get; set; } = 1;
+        public double RosterHudHeight { get; set; } = 1;
+        public double DistressHudWidth { get; set; } = 1;
+        public double DistressHudHeight { get; set; } = 1;
+
             public bool DistressPositionCustom { get; set; }
             public double DistressX { get; set; }
             public double DistressY { get; set; } = .96;
@@ -270,6 +296,18 @@ namespace ZeoOverlay
                 }
                 UiExtension x = Json.Deserialize<UiExtension>(File.ReadAllText(p));
                 if (x == null) return;
+                ShipHudWidth=HudLayoutState.SafeSize(x.ShipHudWidth);
+                ShipHudHeight=HudLayoutState.SafeSize(x.ShipHudHeight);
+                ScopeHudWidth=HudLayoutState.SafeSize(x.ScopeHudWidth);
+                ScopeHudHeight=HudLayoutState.SafeSize(x.ScopeHudHeight);
+                FleetHudWidth=HudLayoutState.SafeSize(x.FleetHudWidth);
+                FleetHudHeight=HudLayoutState.SafeSize(x.FleetHudHeight);
+                AmmoHudWidth=HudLayoutState.SafeSize(x.AmmoHudWidth);
+                AmmoHudHeight=HudLayoutState.SafeSize(x.AmmoHudHeight);
+                RosterHudWidth=HudLayoutState.SafeSize(x.RosterHudWidth);
+                RosterHudHeight=HudLayoutState.SafeSize(x.RosterHudHeight);
+                DistressHudWidth=HudLayoutState.SafeSize(x.DistressHudWidth);
+                DistressHudHeight=HudLayoutState.SafeSize(x.DistressHudHeight);
                 DistressPositionCustom=x.DistressPositionCustom;
                 DistressX=Clamp(x.DistressX,-.98,.98); DistressY=Clamp(x.DistressY,-.98,.98);
                 ShowAmmoPdc40 = x.ShowAmmoPdc40;
@@ -296,6 +334,18 @@ namespace ZeoOverlay
                 if (string.IsNullOrWhiteSpace(p)) return;
                 var x = new UiExtension
                 {
+                    ShipHudWidth=HudLayoutState.SafeSize(ShipHudWidth),
+                    ShipHudHeight=HudLayoutState.SafeSize(ShipHudHeight),
+                    ScopeHudWidth=HudLayoutState.SafeSize(ScopeHudWidth),
+                    ScopeHudHeight=HudLayoutState.SafeSize(ScopeHudHeight),
+                    FleetHudWidth=HudLayoutState.SafeSize(FleetHudWidth),
+                    FleetHudHeight=HudLayoutState.SafeSize(FleetHudHeight),
+                    AmmoHudWidth=HudLayoutState.SafeSize(AmmoHudWidth),
+                    AmmoHudHeight=HudLayoutState.SafeSize(AmmoHudHeight),
+                    RosterHudWidth=HudLayoutState.SafeSize(RosterHudWidth),
+                    RosterHudHeight=HudLayoutState.SafeSize(RosterHudHeight),
+                    DistressHudWidth=HudLayoutState.SafeSize(DistressHudWidth),
+                    DistressHudHeight=HudLayoutState.SafeSize(DistressHudHeight),
                     DistressPositionCustom=DistressPositionCustom,
                     DistressX=DistressX, DistressY=DistressY,
                     ShowAmmoPdc40 = ShowAmmoPdc40,

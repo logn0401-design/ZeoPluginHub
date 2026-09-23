@@ -795,8 +795,10 @@ namespace ZeoOverlay
             float panelW = compact ? Math.Max(380f, 430f * scale) : (two ? Math.Max(520f, 650f * scale) : Math.Max(330f, 390f * scale));
             float panelH = pad * 2f + titleSize + 10f * scale + Math.Max(1, visualRows) * rowH;
             PointF origin = NormToPixel(width, height, _settings.FlightX, _settings.FlightY);
-            RectangleF rect = ClampRect(width, height, origin.X, origin.Y, panelW, panelH);
+            RectangleF rect = SizedPanelRectangle("ship",width,height,origin.X,origin.Y,panelW,panelH);
             RecordLayoutBounds("ship",rect);
+            using(BeginPanelSize(g,"ship",rect))
+            {
             Color accent = _settings.ColorOf(_settings.MenuAccentColor, Color.Goldenrod);
             DrawTacticalPlate(g, rect, accent, _settings.BackingShipInfo);
 
@@ -809,12 +811,13 @@ namespace ZeoOverlay
             {
                 float x0 = rect.X + pad + 4f * panelScale;
                 float y0 = rect.Y + pad;
-                string shipName = ShortName(string.IsNullOrWhiteSpace(frame.OwnGridName) ? "SHIP STATUS" : frame.OwnGridName, two ? 52 : 34);
+                string shipName = ShortName(string.IsNullOrWhiteSpace(frame.OwnGridName) ? "SHIP STATUS" : frame.OwnGridName, two ? 100 : 80);
                 SizeF shipTitle = g.MeasureString(shipName, titleFont);
-                g.DrawString(shipName, titleFont, pBrush, rect.Left + (rect.Width - shipTitle.Width) / 2f, y0);
+                DrawFitted(g,shipName,titleFont,pBrush,new RectangleF(rect.X+pad,y0,rect.Width-pad*2,titleFont.Height));
                 y0 += titleFont.Height + 8f * scale;
+                rowH=Math.Max(rowH,(rect.Bottom-pad-y0)/Math.Max(1,visualRows));
                 float colGap = 14f * scale;
-                float colW = (rect.Width - pad * 2f - colGap) / 2f;
+                float colW = (rect.Width - pad * 2f - 4f*panelScale - colGap) / 2f;
 
                 for (int i = 0; i < items.Count; i++)
                 {
@@ -822,7 +825,7 @@ namespace ZeoOverlay
                     int row = (two || compact) ? i / 2 : i;
                     float x = x0 + col * (colW + colGap);
                     float y = y0 + row * rowH;
-                    float widthForItem = (two || compact) ? colW : (rect.Width - pad * 2f);
+                    float widthForItem = (two || compact) ? colW : (rect.Width - pad * 2f - 4f*panelScale);
                     int kind = items[i];
                     if (kind == 0) DrawStatusBar(g, rect, font, pBrush, sBrush, "H20", frame.H2O, Percent(frame.H2O), x, y, scale, barH, true, widthForItem, .50, .25);
                     else if (kind == 1) DrawStatusBar(g, rect, font, pBrush, sBrush, "O2", frame.O2, Percent(frame.O2), x, y, scale, barH, true, widthForItem, .50, .25);
@@ -842,22 +845,23 @@ namespace ZeoOverlay
                     else
                     {
                         g.DrawString("SPD", font, sBrush, x, y + 2f * scale);
-                        g.DrawString(frame.Speed.ToString("0.0") + " m/s", font, pBrush, x + 72f * scale, y + 2f * scale);
+                        DrawFitted(g,frame.Speed.ToString("0.0")+" m/s",font,pBrush,new RectangleF(x+72f*scale,y,widthForItem-72f*scale,font.Height));
                     }
                 }
+            }
             }
         }
 
         private void DrawStatusBar(Graphics g, RectangleF panel, Font font, Brush primary, Brush secondary, string label, double ratio, string value, float x, float y, float scale, float barH, bool highIsGood = true, float widthOverride = 0f, double warningThreshold = .50, double criticalThreshold = .25)
         {
             float available = widthOverride > 1f ? widthOverride : panel.Width;
-            float labelW = 72f * scale;
-            float valueW = Math.Min(128f * scale, Math.Max(90f * scale, available * .38f));
+            float labelW = Math.Min(72f * scale,available*.28f);
+            float valueW = available*.38f;
             float barX = x + labelW;
-            float barW = Math.Max(55f * scale, available - labelW - valueW - 10f * scale);
+            float barW = Math.Max(1,available - labelW - valueW - 10f * scale);
             float barY = y + Math.Max(9f, font.Height * .48f);
 
-            g.DrawString(label, font, secondary, x, y);
+            DrawFitted(g,label,font,secondary,new RectangleF(x,y,labelW-3,font.Height));
             Color panelColor = _settings.ColorOf(_settings.HudPanelColor, Color.Black);
             Color border = _settings.ColorOf(_settings.HudBorderColor, Color.Gray);
             using (var bg = new SolidBrush(Color.FromArgb(185, panelColor)))
@@ -877,7 +881,7 @@ namespace ZeoOverlay
 
             SizeF vm = g.MeasureString(value ?? "", font);
             float valueX = x + available - vm.Width;
-            g.DrawString(value ?? "", font, primary, valueX, y);
+            DrawFitted(g,value ?? "",font,primary,new RectangleF(x+available-valueW,y,valueW,font.Height),true);
         }
 
         private Color StatusColor(double ratio, bool highIsGood, double warningThreshold = .50, double criticalThreshold = .25)
@@ -960,8 +964,10 @@ namespace ZeoOverlay
             float panelW = Math.Max(390f, 430f * scale);
             float panelH = pad * 2f + 28f * scale + Math.Max(2, rows) * rowH;
             PointF origin = NormToPixel(width, height, _settings.AmmoX, _settings.AmmoY);
-            RectangleF rect = ClampRect(width, height, origin.X, origin.Y, panelW, panelH);
+            RectangleF rect = SizedPanelRectangle("ammo",width,height,origin.X,origin.Y,panelW,panelH);
             RecordLayoutBounds("ammo",rect);
+            using(BeginPanelSize(g,"ammo",rect))
+            {
             DrawTacticalPlate(g, rect, _settings.ColorOf(_settings.SpectrumColor, Color.Goldenrod), _settings.BackingAmmo);
 
             Color primary = _settings.ColorOf(_settings.HudTextColor, Color.Gainsboro);
@@ -974,18 +980,19 @@ namespace ZeoOverlay
                 float x = rect.X + pad;
                 float y = rect.Y + pad;
                 SizeF ammoTitle = g.MeasureString("AMMUNITION", titleFont);
-                g.DrawString("AMMUNITION", titleFont, pb, rect.Left + (rect.Width - ammoTitle.Width) / 2f, y);
+                DrawFitted(g,"AMMUNITION",titleFont,pb,new RectangleF(x,y,(rect.Width-pad*2)*.60f,titleFont.Height));
                 string hdr = _settings.AmmoValueOrder == 1 ? "WANT / HAVE" : "HAVE / WANT";
                 SizeF hm = g.MeasureString(hdr, font);
-                if (rows > 0) g.DrawString(hdr, font, sb, rect.Right - pad - hm.Width, y + 2f * scale);
+                if(rows>0) DrawFitted(g,hdr,font,sb,new RectangleF(x+(rect.Width-pad*2)*.62f,y,(rect.Width-pad*2)*.38f,titleFont.Height),true);
                 y += 27f * scale;
+                rowH=Math.Max(rowH,(rect.Bottom-pad-y)/Math.Max(2,rows));
                 if (rows == 0)
                 {
-                    g.DrawString(AmmoEmptyMessage(frame), font, pb, x, y);
+                    DrawFitted(g,AmmoEmptyMessage(frame),font,pb,new RectangleF(x,y,rect.Width-pad*2,font.Height));
                     string hint = !frame.HasShip ? "Ammo tracking requires a controlled ship." :
                         (frame.AmmoRows != null && frame.AmmoRows.Count > 0 ? "HOME > AMMO: enable an ammo type." :
                         (_settings.AmmoOnlyRelevant ? "HOME > AMMO: turn relevant-only OFF to show all." : "Waiting for the ship inventory scan."));
-                    g.DrawString(hint, font, sb, x, y + rowH);
+                    DrawFitted(g,hint,font,sb,new RectangleF(x,y+rowH,rect.Width-pad*2,font.Height));
                 }
                 for (int i = 0; i < rows; i++)
                 {
@@ -993,16 +1000,17 @@ namespace ZeoOverlay
                     double ratio = a.Want > 0 ? a.Have / a.Want : 1.0;
                     Color c = StatusColor(ratio, true, .75, .40);
                     string name = _settings.AmmoNameStyle == 1 ? a.ServerName : (_settings.AmmoNameStyle == 2 ? AmmoCompact(a.CleanName) : a.CleanName);
-                    using (var cb = new SolidBrush(c)) g.DrawString(ShortName(name, 28), font, cb, x, y);
+                    using(var cb=new SolidBrush(c)) DrawFitted(g,name,font,cb,new RectangleF(x,y,(rect.Width-pad*2)*.57f,font.Height));
                     string value = _settings.AmmoValueOrder == 1 ? (a.Want.ToString("0") + " / " + a.Have.ToString("0")) : (a.Have.ToString("0") + " / " + a.Want.ToString("0"));
                     SizeF vm = g.MeasureString(value, font);
-                    g.DrawString(value, font, pb, rect.Right - pad - vm.Width, y);
+                    DrawFitted(g,value,font,pb,new RectangleF(x+(rect.Width-pad*2)*.60f,y,(rect.Width-pad*2)*.40f,font.Height),true);
                     float barY = y + font.Height + 1f * scale;
                     float barW = rect.Width - pad * 2f;
                     using (var bg = new SolidBrush(Color.FromArgb(120, _settings.ColorOf(_settings.HudPanelColor, Color.Black)))) g.FillRectangle(bg, x, barY, barW, Math.Max(2f, 3.5f*scale));
                     using (var fb = new SolidBrush(Color.FromArgb(225, c))) g.FillRectangle(fb, x, barY, barW * (float)Math.Max(0, Math.Min(1, ratio)), Math.Max(2f, 3.5f*scale));
                     y += rowH;
                 }
+            }
             }
         }
 
@@ -1058,8 +1066,10 @@ namespace ZeoOverlay
             float panelW = Math.Max(380f, 445f * scale);
             float panelH = pad * 2f + Math.Max(18f, 22f * scale) + 8f * scale + Math.Max(1, _settings.RosterRows) * rowH;
             PointF origin = NormToPixel(width, height, _settings.RosterX, _settings.RosterY);
-            RectangleF rect = ClampRect(width, height, origin.X, origin.Y, panelW, panelH);
+            RectangleF rect = SizedPanelRectangle("roster",width,height,origin.X,origin.Y,panelW,panelH);
             RecordLayoutBounds("roster",rect);
+            using(BeginPanelSize(g,"roster",rect))
+            {
             Color accent = _settings.ColorOf(_settings.FriendlyColor, Color.Cyan);
             DrawTacticalPlate(g, rect, accent, _settings.BackingRoster);
 
@@ -1074,16 +1084,17 @@ namespace ZeoOverlay
                 float x = rect.X + pad;
                 float y = rect.Y + pad;
                 SizeF rosterTitle = g.MeasureString("FLEET ROSTER", titleFont);
-                g.DrawString("FLEET ROSTER", titleFont, pb, rect.Left + (rect.Width - rosterTitle.Width) / 2f, y);
+                DrawFitted(g,"FLEET ROSTER",titleFont,pb,new RectangleF(x,y,(rect.Width-pad*2)*.52f,titleFont.Height));
                 string sector = ShortName(frame.SectorName ?? "UNKNOWN SECTOR", 24);
                 SizeF sm = g.MeasureString(sector, font);
-                g.DrawString(sector, font, sb, rect.Right - pad - sm.Width, y + 2f * scale);
+                DrawFitted(g,frame.SectorName ?? "UNKNOWN SECTOR",font,sb,new RectangleF(x+(rect.Width-pad*2)*.54f,y,(rect.Width-pad*2)*.46f,titleFont.Height),true);
                 y += titleFont.Height + 7f * scale;
+                rowH=Math.Max(rowH,(rect.Bottom-pad-y)/Math.Max(1,_settings.RosterRows));
 
                 if (count == 0)
                 {
                     string waiting = frame.RxLinked ? "NO SERVER ROSTER ROWS" : "FLEETLINK WAITING";
-                    g.DrawString(waiting, font, sb, x, y);
+                    DrawFitted(g,waiting,font,sb,new RectangleF(x,y,rect.Width-pad*2,font.Height));
                     return;
                 }
 
@@ -1100,15 +1111,16 @@ namespace ZeoOverlay
                     if (r.Distress && r.DistressSecondsRemaining > 0) hp = Math.Ceiling(r.DistressSecondsRemaining/60.0).ToString("0") + "m";
                     using (var cb = new SolidBrush(Color.FromArgb(!r.Online ? 145 : 240, c)))
                     {
-                        g.DrawString(icon + " " + ShortName(r.Name, 22), font, cb, x, y);
+                        DrawFitted(g,icon+" "+r.Name,font,cb,new RectangleF(x,y,(rect.Width-pad*2)*.48f,font.Height));
                         SizeF wm = g.MeasureString(where, font);
-                        g.DrawString(where, font, cb, rect.Right - pad - 62f * scale - wm.Width, y);
+                        DrawFitted(g,where,font,cb,new RectangleF(x+(rect.Width-pad*2)*.50f,y,(rect.Width-pad*2)*.34f,font.Height),true);
                         SizeF hm = g.MeasureString(hp, font);
-                        g.DrawString(hp, font, cb, rect.Right - pad - hm.Width, y);
+                        DrawFitted(g,hp,font,cb,new RectangleF(x+(rect.Width-pad*2)*.86f,y,(rect.Width-pad*2)*.14f,font.Height),true);
                     }
                     y += rowH;
                     rendered++;
                 }
+            }
             }
         }
 
@@ -1130,8 +1142,10 @@ namespace ZeoOverlay
                 float headerH = titleFont.Height + 6f * overall + headFont.Height + 7f * overall;
                 float panelH = pad * 2f + headerH + capacity * lineH + 5f * overall;
                 PointF origin = NormToPixel(width, height, _settings.TrackPanelX, _settings.TrackPanelY);
-                RectangleF rect = ClampRect(width, height, origin.X, origin.Y, panelW, panelH);
+                RectangleF rect = SizedPanelRectangle("scope",width,height,origin.X,origin.Y,panelW,panelH);
                 RecordLayoutBounds("scope",rect);
+            using(BeginPanelSize(g,"scope",rect))
+            {
 
                 DrawTacticalPlate(g, rect, _settings.ColorOf(_settings.HostileColor, Color.OrangeRed), _settings.BackingTos); // ZEOCORE_V13E_TOS_BACKING_ARG_FIX
 
@@ -1144,11 +1158,11 @@ namespace ZeoOverlay
                     float ty = rect.Y + pad;
                     string title = "TRACKS ON SCOPE";
                     SizeF titleMeasure = g.MeasureString(title, titleFont);
-                    g.DrawString(title, titleFont, titleBrush, rect.Left + (rect.Width-titleMeasure.Width)/2f, ty);
+                    DrawFitted(g,title,titleFont,titleBrush,new RectangleF(rect.Left+pad,ty,(rect.Width-pad*2)*.86f,titleFont.Height));
 
                     string countText = Math.Max(0, frame.TotalScopeCount).ToString("00");
                     SizeF countMeasure = g.MeasureString(countText, headFont);
-                    g.DrawString(countText, headFont, headBrush, rect.Right-pad-countMeasure.Width, ty + 2f*overall);
+                    DrawFitted(g,countText,headFont,headBrush,new RectangleF(rect.Left+pad+(rect.Width-pad*2)*.88f,ty,(rect.Width-pad*2)*.12f,titleFont.Height),true);
 
                     float usable = Math.Max(180f, rect.Width - pad * 2f);
                     float idX = rect.Left + pad;
@@ -1156,11 +1170,12 @@ namespace ZeoOverlay
                     float statusX = idX + usable * .43f;
                     float coreX = idX + usable * .74f;
                     float yy = ty + titleFont.Height + 6f * overall;
-                    g.DrawString("#", headFont, headBrush, idX, yy);
-                    g.DrawString("DISTANCE", headFont, headBrush, distX, yy);
-                    g.DrawString("TARGET SPD", headFont, headBrush, statusX, yy);
-                    g.DrawString("CORE", headFont, headBrush, coreX, yy);
+                    DrawFitted(g,"#",headFont,headBrush,new RectangleF(idX,yy,distX-idX-4,headFont.Height));
+                    DrawFitted(g,"DISTANCE",headFont,headBrush,new RectangleF(distX,yy,statusX-distX-4,headFont.Height));
+                    DrawFitted(g,"TARGET SPD",headFont,headBrush,new RectangleF(statusX,yy,coreX-statusX-4,headFont.Height));
+                    DrawFitted(g,"CORE",headFont,headBrush,new RectangleF(coreX,yy,rect.Right-pad-coreX-4,headFont.Height));
                     yy += headFont.Height + 7f * overall;
+                    lineH=Math.Max(lineH,(rect.Bottom-pad-yy)/capacity);
 
                     if (frame.ScopeRows == null) return;
                     int rows = Math.Min(capacity, frame.ScopeRows.Count);
@@ -1196,15 +1211,16 @@ namespace ZeoOverlay
                             else status += " R" + Math.Abs(r.Closing).ToString("0");
                             string core = r.Distress ? ("SOS " + (r.Name ?? "DISTRESS")) : (r.Name ?? "");
                             if (string.IsNullOrWhiteSpace(core)) core = "UNKNOWN";
-                            core = ShortName(core, 18);
-                            g.DrawString(id, bodyFont, rowBrush, idX, yy);
-                            g.DrawString(FormatRange(r.Distance), bodyFont, rowBrush, distX, yy);
-                            g.DrawString(status, bodyFont, rowBrush, statusX, yy);
-                            g.DrawString(core, bodyFont, rowBrush, coreX, yy);
+                            // The measured column fit keeps the complete contact name.
+                            DrawFitted(g,id,bodyFont,rowBrush,new RectangleF(idX,yy,distX-idX-4,bodyFont.Height));
+                            DrawFitted(g,FormatRange(r.Distance),bodyFont,rowBrush,new RectangleF(distX,yy,statusX-distX-4,bodyFont.Height));
+                            DrawFitted(g,status,bodyFont,rowBrush,new RectangleF(statusX,yy,coreX-statusX-4,bodyFont.Height));
+                            DrawFitted(g,core,bodyFont,rowBrush,new RectangleF(coreX,yy,rect.Right-pad-coreX-4,bodyFont.Height));
                         }
                         yy += lineH;
                     }
                 }
+            }
             }
         }
 
@@ -1226,8 +1242,11 @@ namespace ZeoOverlay
                 float panelH = pad + titleH + lines.Count * lineH + pad;
 
                 PointF origin = NormToPixel(width, height, nx, ny);
-                RectangleF rect = ClampRect(width, height, origin.X, origin.Y, panelW, panelH);
-                if(title=="ZEO NETWORK") RecordLayoutBounds("fleet",rect);
+                string panelId=title=="ZEO NETWORK" ? "fleet" : "ship";
+                RectangleF rect = SizedPanelRectangle(panelId,width,height,origin.X,origin.Y,panelW,panelH);
+                RecordLayoutBounds(panelId,rect);
+                using(BeginPanelSize(g,panelId,rect))
+                {
                 Color accent = _settings.ColorOf(_settings.MenuAccentColor, Color.Goldenrod);
                 DrawTacticalPlate(g, rect, accent, backingFill);
 
@@ -1241,14 +1260,16 @@ namespace ZeoOverlay
                     if (!string.IsNullOrEmpty(title))
                     {
                         SizeF tm = g.MeasureString(title, titleFont);
-                        g.DrawString(title, titleFont, b1, rect.Left + (rect.Width - tm.Width) / 2f, yy); // ZEOCORE_V067_CENTERED_HEADER
+                        DrawFitted(g,title,titleFont,b1,new RectangleF(x,yy,rect.Width-pad*2-8,titleFont.Height)); // ZEOCORE_V067_CENTERED_HEADER
                         yy += titleFont.Height + gap;
                     }
+                    lineH=Math.Max(lineH,(rect.Bottom-pad-yy)/Math.Max(1,lines.Count));
                     for (int i = 0; i < lines.Count; i++)
                     {
-                        g.DrawString(lines[i] ?? "", bodyFont, i == 0 && mono ? b2 : b1, x, yy);
+                        DrawFitted(g,lines[i] ?? "",bodyFont,i==0 && mono ? b2 : b1,new RectangleF(x,yy,rect.Width-pad*2-8,bodyFont.Height));
                         yy += lineH;
                     }
+                }
                 }
             }
         }
@@ -1826,6 +1847,8 @@ namespace ZeoOverlay
             float w=Math.Max(420f,520f*scale), h=Math.Max(62f,74f*scale);
             RectangleF rect=DistressRectangle(width,height,w,h,scale);
             RecordLayoutBounds("distress",rect);
+            using(BeginPanelSize(g,"distress",rect))
+            {
             using(var fill=new SolidBrush(Color.FromArgb(_settings.BackingDistress ? Math.Min(225,_settings.PanelOpacity) : 0,_settings.ColorOf(_settings.HudPanelColor,Color.Black)))) g.FillRectangle(fill,rect); // ZEOCORE_V13B_PER_PANEL_BACKINGS
             using(var pen=new Pen(Color.FromArgb(245,c),Math.Max(1.5f,2f*scale))) g.DrawRectangle(pen,rect.X,rect.Y,rect.Width,rect.Height);
             using(var title=new Font(HudTitleFont(),Math.Max(12f,15f*scale),FontStyle.Bold,GraphicsUnit.Pixel))
@@ -1836,18 +1859,19 @@ namespace ZeoOverlay
                 if(d==null)
                 {
                     string left="! YOUR DISTRESS // ACTIVE";
-                    g.DrawString(left,title,cb,rect.X+12f*scale,rect.Y+8f*scale);
-                    g.DrawString((frame.DistressStatus ?? "WAITING FOR SERVER")+"   //   HOLD KEY AGAIN TO CLEAR",body,wb,rect.X+12f*scale,rect.Y+36f*scale);
+                    DrawFitted(g,left,title,cb,new RectangleF(rect.X+12f*scale,rect.Y+8f*scale,rect.Width-24f*scale,(rect.Height-16f*scale)*.45f));
+                    DrawFitted(g,(frame.DistressStatus ?? "WAITING FOR SERVER")+"   //   HOLD KEY AGAIN TO CLEAR",body,wb,new RectangleF(rect.X+12f*scale,rect.Y+rect.Height*.5f,rect.Width-24f*scale,rect.Height*.5f-8f*scale));
                 }
                 else
                 {
                     string left="! DISTRESS // "+ShortName(d.Name,24)+" // "+ShortName(d.Type,18);
-                    g.DrawString(left,title,cb,rect.X+12f*scale,rect.Y+8f*scale);
+                    DrawFitted(g,left,title,cb,new RectangleF(rect.X+12f*scale,rect.Y+8f*scale,rect.Width-24f*scale,(rect.Height-16f*scale)*.45f));
                     string where=d.SameSector && d.Distance>=0 ? FormatRange(d.Distance) : ShortName(d.SectorName,24);
                     string ttl=d.SecondsRemaining>0 ? Math.Ceiling(d.SecondsRemaining/60.0).ToString("0")+"m TTL" : "ACTIVE";
                     string hp=d.ShipHp>=0 ? "HP "+(Math.Max(0,Math.Min(1,d.ShipHp))*100).ToString("0")+"%" : "HP --";
-                    g.DrawString(where+"   //   "+hp+"   //   "+ttl,body,wb,rect.X+12f*scale,rect.Y+36f*scale);
+                    DrawFitted(g,where+"   //   "+hp+"   //   "+ttl,body,wb,new RectangleF(rect.X+12f*scale,rect.Y+rect.Height*.5f,rect.Width-24f*scale,rect.Height*.5f-8f*scale));
                 }
+            }
             }
         }
 
