@@ -1,15 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <PluginData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
   <Id>logn0401-design/ZeoPluginHub.ZeosOreHelper</Id>
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Ore Helper</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0 — Learned ore search, scan estimates and deposit guidance.</Tooltip>
-  <Description>Zeo Ore Helper 1.0 helps locate ores with learned search data, configurable pings, optional SDX2 client scan estimates, and approximate nearby deposit guidance within 5 km. Includes the native Zeo settings menu and external HUD. Quantities are sampled estimates, not exact server totals. The search starts off each launch. Windows / Pulsar Legacy.</Description>
+  <Tooltip>1.0.1 — Learned ore search, scan estimates and deposit guidance. Overlay shutdown fix.</Tooltip>
+  <Description>Zeo Ore Helper 1.0.1 helps locate ores with learned search data, configurable pings, optional SDX2 client scan estimates, and approximate nearby deposit guidance within 5 km. Includes the native Zeo settings menu and external HUD. Quantities are sampled estimates, not exact server totals. The search starts off each launch. Windows / Pulsar Legacy. The overlay now closes with its owning game or after its game window is destroyed, including crash recovery and plugin unload.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>0ea9a5584c5ea00ec9db8191397c1903fc503091</Commit>
+  <Commit>a6d958711b6b02da6a247049e063e7e406e4d0fa</Commit>
   <SourceDirectories><Directory>loader/ZeosOreHelper/</Directory></SourceDirectories>
-  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/0.7.2/ZeosOreHelper.Runtime.dll" Sha256="0ebca81a2b1f41fe7e4de0a0bf92b22ce6f9da6a7c3c0aa528b6425b7725e4e0" Reference="true" />
-  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/0.7.2/ZeosOreOverlay.zip" Sha256="3ad587e6637ec22bc786bf9746e3ec498b968a30fa850d2f0187b5b82491ed4b" Extract="true" />
+  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/1.0.1/ZeosOreHelper.Runtime.dll" Sha256="44eea09d89096ee4248f534f3cd7b02c6411fe6ca68d5bfaa495ade7f9817f61" Reference="true" />
+  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/1.0.1/ZeosOreOverlay.zip" Sha256="b8f52c77a8d3d3809455d1a4a3d15c5e78e76e32d4713d305eda5110a843818f" Extract="true" />
 </PluginData>
