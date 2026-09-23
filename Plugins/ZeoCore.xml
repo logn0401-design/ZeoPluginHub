@@ -8,10 +8,10 @@
   <Description>Zeo Core 1.0.2 adds independent HUD width/height resizing with proportional text and fitted columns. HOME &gt; LAYOUT &gt; EDIT HUD LAYOUT includes Save, Cancel, Undo and Reset Size. HOME &gt; AMMO &gt; QUICK REFILL / CANCEL tops up ammo WANT deficits through a docked conveyor connection and refills working ship tanks, then restores their stockpile modes. Includes tactical markers, scope, ship and ammo status, fleet roster, Battle Manager sharing, and hidden distress GPS from all received sectors. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>4c70d7d38d81ffb78cb4263152e1b85372f464e2</Commit>
+  <Commit>4d6135d16b6a4aaa32bb067302cc746b85b08d12</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoCore/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.2/ZeoCore.Runtime.dll" Sha256="6ff63b3d130bb831d5f543f5081ed7dd84c3230c702a4264240091ee3cea6442" Reference="true" />
-  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.2/ZeoOverlay.zip" Sha256="b0e30ad98b0c365581818c26a91159e8efb88b37cb454dfa923854d461f6f770" Extract="true" />
+  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.2.1/ZeoCore.Runtime.dll" Sha256="514469de297752690ab8a5290773f08b865dc69a866d124563e3900be2a7b06e" Reference="true" />
+  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.2.1/ZeoOverlay.zip" Sha256="b0e30ad98b0c365581818c26a91159e8efb88b37cb454dfa923854d461f6f770" Extract="true" />
 </PluginData>
