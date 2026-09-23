@@ -68,6 +68,7 @@ namespace ZeoCore
         private bool _building, _rebuild, _committing;
         private string _message="Changes apply immediately. Type a value, then press ENTER or APPLY.";
         private MyGuiControlLabel _status;
+        private MyGuiControlLabel _refillStatus;
         private ZeoNativeColorScreen _colorScreen;
 
         internal ZeoNativeSettingsScreen(HudSettings settings, Action openExternal, Action changed, Action ensureOverlay)
@@ -85,8 +86,8 @@ namespace ZeoCore
         {
             bool result=base.Update(hasFocus);
             if (_rebuild && !_building) { _rebuild=false; BuildControls(); }
-            if(_status!=null && ZeoNativeCatalog.Pages[_page]=="AMMO")
-                _status.Text=Short((Plugin.RefillActive ? "REFILLING: " : "")+Plugin.RefillStatus,108);
+            if(_refillStatus!=null)
+                _refillStatus.Text=Short((Plugin.RefillActive ? "REFILLING: " : "")+Plugin.RefillStatus,108);
             return result;
         }
         public override bool CloseScreen(bool isUnloading=false)
@@ -111,7 +112,7 @@ namespace ZeoCore
             _building=true;
             try
             {
-                Controls.Clear(); _editors.Clear(); _model.Reload();
+                Controls.Clear(); _editors.Clear(); _model.Reload(); _refillStatus=null;
                 AddCaption("ZEOCORE // TACTICAL SYSTEMS",new Vector4(0.82f,0.91f,0.94f,1f),new Vector2(0f,-0.417f),0.88f);
                 for (int i=0;i<ZeoNativeCatalog.Pages.Length;i++)
                 {
@@ -145,7 +146,8 @@ namespace ZeoCore
                         if(!CommitEditors())return;
                         Plugin.ToggleRefill();
                     },0.62f);
-                Label(-0.421f,0.365f,HintForPage(),0.53f);
+                var hint=Label(-0.421f,0.365f,HintForPage(),0.53f);
+                if(ZeoNativeCatalog.Pages[_page]=="AMMO")_refillStatus=hint;
                 _status=Label(-0.421f,0.387f,Short(_message,108),0.50f);
                 Button(-0.285f,0.425f,0.280f,0.044f,"FULL / LEGACY SETTINGS",OpenExternal,0.61f);
                 Button(0.335f,0.425f,0.170f,0.044f,"CLOSE",delegate { CloseScreen(); },0.65f);
