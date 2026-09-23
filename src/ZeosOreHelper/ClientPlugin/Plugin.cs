@@ -16,7 +16,7 @@ namespace ZeosOreHelper
     public sealed class Plugin : IPlugin
     {
         public const string Name="Zeos Ore Helper";
-        public const string Version="0.7.2";
+        public const string Version="1.0.1-OVERLAY-LIFETIME";
         internal static string CatalogOverlayPath {get;private set;}
         public void LoadAssets(IReadOnlyDictionary<string,string> assets) {
             string directory;

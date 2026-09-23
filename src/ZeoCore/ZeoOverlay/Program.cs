@@ -10,6 +10,10 @@ namespace ZeoOverlay
         [STAThread]
         private static void Main(string[] args)
         {
+            using (var lifetime = Zeo.Shared.OverlayLifetime.Attach(args, () => Application.Exit()))
+            {
+                if (lifetime == null) return;
+
             bool created;
             using (var mutex = new Mutex(true, "Local\\ZeoOverlay_v0_4", out created))
             {
@@ -37,6 +41,8 @@ namespace ZeoOverlay
 
                 var model = OverlaySettings.Load(settings);
                 Application.Run(new HudOverlayForm(model, port));
+            }
+        
             }
         }
     }

@@ -7,8 +7,8 @@
     <LangVersion>latest</LangVersion>
     <PlatformTarget>x64</PlatformTarget>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <AssemblyVersion>0.7.2.0</AssemblyVersion>
-    <FileVersion>0.7.2.0</FileVersion>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
     <Nullable>disable</Nullable>
     <PathSeparator Condition="$([MSBuild]::IsOSPlatform('Windows'))">\</PathSeparator>
     <PathSeparator Condition="!$([MSBuild]::IsOSPlatform('Windows'))">/</PathSeparator>
@@ -39,4 +39,5 @@
     <Reference Include="VRage.Render"><HintPath>$(Bin64Dir)VRage.Render.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
-<ItemGroup><Compile Include="../Shared/*.cs" /></ItemGroup><ItemGroup><Compile Include="../ZeosOreOverlay/OreOverlaySettings.cs" Link="OreOverlaySettings.cs" /></ItemGroup></Project>
+<ItemGroup><Compile Include="../Shared/*.cs" /></ItemGroup><ItemGroup><Compile Include="../ZeosOreOverlay/OreOverlaySettings.cs" Link="OreOverlaySettings.cs" /></ItemGroup><ItemGroup><Compile Include="../../Shared/OverlayLifetime.cs" Link="Shared/OverlayLifetime.cs" /></ItemGroup>
+</Project>

@@ -19,13 +19,14 @@ namespace ZeosOreHelper
         private readonly IPEndPoint _endpoint=new IPEndPoint(IPAddress.Loopback,Port);
         private DateTime _lastLaunchUtc=DateTime.MinValue;
         private string _lastError="";
-        private long _sent;private DateTime _nextProbe=DateTime.MinValue;private bool _running;
+        private long _sent;
+        private readonly Zeo.Shared.OverlayProcessOwner _owner = new Zeo.Shared.OverlayProcessOwner();
 
         internal string OverlayExePath { get { return Plugin.CatalogOverlayPath??Path.Combine(Plugin.DataDirectory,"ZeosOreOverlay.exe"); } }
         internal bool Installed { get { return File.Exists(OverlayExePath); } }
         internal string LastError { get { return _lastError; } }
         internal long Sent { get { return _sent; } }
-        internal bool Running { get { if(DateTime.UtcNow<_nextProbe)return _running;_nextProbe=DateTime.UtcNow.AddSeconds(2);try{var processes=Process.GetProcessesByName("ZeosOreOverlay");_running=processes.Length>0;foreach(var p in processes)p.Dispose();}catch{_running=false;}return _running; } }
+        internal bool Running { get { return _owner.Running; } }
 
         internal void EnsureRunning(bool enabled)
         {
@@ -36,7 +37,7 @@ namespace ZeosOreHelper
             {
                 if(!Installed){_lastError="overlay executable missing";return;}
                 var psi=new ProcessStartInfo{FileName=OverlayExePath,Arguments="--settings \""+HudSettings.SettingsPath+"\" --port "+Port,WorkingDirectory=Plugin.DataDirectory,UseShellExecute=false,CreateNoWindow=true};
-                using(var launched=Process.Start(psi)){}_lastError="";Plugin.Log("ZeosOreOverlay launch requested.");
+                _owner.Start(psi);_lastError="";Plugin.Log("ZeosOreOverlay launch requested.");
             }
             catch(Exception ex){_lastError=ex.GetType().Name+": "+ex.Message;Plugin.Log("Overlay launch failed: "+_lastError);}
         }
@@ -52,6 +53,6 @@ namespace ZeosOreHelper
             var remove=p.Frame.Roids.Where(r=>!r.Selected&&!r.PingEligible).LastOrDefault()??p.Frame.Roids.LastOrDefault(r=>!r.Selected)??p.Frame.Roids.Last();
             p.Frame.Roids.Remove(remove);p.Frame.ShownPings=p.Frame.Roids.Count(r=>r.PingEligible);d=Encoding.UTF8.GetBytes(_json.Serialize(p));
         }if(d.Length>62000)throw new InvalidOperationException("overlay packet exceeded safe UDP size");return d;}
-        public void Dispose(){try{Send(new OreOverlayPacket{Kind="command",Command="shutdown"});}catch{}try{_udp.Close();}catch{}}
+        public void Dispose(){_owner.Dispose();try{_udp.Close();}catch{}}
     }
 }

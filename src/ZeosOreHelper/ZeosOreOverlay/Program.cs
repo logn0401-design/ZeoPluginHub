@@ -8,6 +8,10 @@ namespace ZeosOreOverlay
     {
         [STAThread]private static void Main(string[] args)
         {
+            using (var lifetime = Zeo.Shared.OverlayLifetime.Attach(args, () => Application.Exit()))
+            {
+                if (lifetime == null) return;
+
             OverlayLog.Write("Ore overlay v0.7.2 starting");
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException+=(s,e)=>OverlayLog.Error(e.Exception);
@@ -21,6 +25,8 @@ namespace ZeosOreOverlay
                 var s=new OreOverlaySettings(settings);Application.Run(new HudOverlayForm(s,port));
             }
             }catch(Exception ex){OverlayLog.Error(ex);}
+        
+            }
         }
     }
 }

@@ -20,7 +20,7 @@ namespace ZeoNav
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "0.1.23-PRECISION-ATTITUDE-PULSAR";
+        public const string Version = "1.0.1-OVERLAY-LIFETIME";
         private string catalogOverlayPath;
 
         // Pulsar supplies this hash-verified package before Init. Settings remain in dataDir.
@@ -45,7 +45,7 @@ namespace ZeoNav
         private UdpClient rx;
         private IPEndPoint overlayEndpoint;
         private int commandPort;
-        private Process overlayProcess;
+        private readonly Zeo.Shared.OverlayProcessOwner overlayProcess = new Zeo.Shared.OverlayProcessOwner();
         private NavConfig config;
         private ShipContext ship;
         private NavController nav;
@@ -104,15 +104,7 @@ namespace ZeoNav
             try { SpeedCapResolver.Dispose(); } catch { }
             try { rx?.Close(); } catch { }
             try { tx?.Close(); } catch { }
-            try
-            {
-                if (overlayProcess != null && !overlayProcess.HasExited)
-                {
-                    overlayProcess.Kill();
-                    overlayProcess.WaitForExit(1000);
-                }
-            }
-            catch { }
+            overlayProcess.Dispose();
             Log("Zeo Nav disposed; overrides released.");
         }
 
@@ -384,16 +376,8 @@ namespace ZeoNav
             lastOverlayLaunch = DateTime.UtcNow;
             try
             {
-                if (overlayProcess != null)
-                {
-                    try
-                    {
-                        if (!overlayProcess.HasExited) return;
-                    }
-                    catch { }
-                    overlayProcess = null;
-                    overlayEndpoint = null;
-                }
+                if (overlayProcess.Running) return;
+                overlayEndpoint = null;
 
                 string exe = catalogOverlayPath ?? Path.Combine(dataDir, "ZeoNavOverlay.exe");
                 if (!File.Exists(exe)) return;
@@ -401,12 +385,12 @@ namespace ZeoNav
                 var psi = new ProcessStartInfo
                 {
                     FileName = exe,
-                    Arguments = "--command-port " + commandPort + " --owner-pid " + gamePid,
+                    Arguments = "--command-port " + commandPort,
                     WorkingDirectory = dataDir,
                     UseShellExecute = true
                 };
 
-                overlayProcess = Process.Start(psi);
+                overlayProcess.Start(psi);
                 Log("Capture-safe ZeoNavOverlay launch requested // commandPort=" + commandPort + " ownerPid=" + gamePid);
             }
             catch (Exception ex) { Log("Overlay launch failed: " + ex.Message); }

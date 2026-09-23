@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Reflection;
 using VRage.Plugins;
-[assembly: AssemblyVersion("0.7.2.0")]
-[assembly: AssemblyFileVersion("0.7.2.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
 namespace Zeo.Ore.PulsarCatalog {
     public sealed class EntryPoint : IPlugin {
         private readonly ZeosOreHelper.Plugin ore=new ZeosOreHelper.Plugin();

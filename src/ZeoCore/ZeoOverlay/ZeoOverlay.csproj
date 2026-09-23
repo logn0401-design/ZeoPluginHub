@@ -7,8 +7,8 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>ZeoOverlay</AssemblyName>
     <RootNamespace>ZeoOverlay</RootNamespace>
-    <AssemblyVersion>1.0.3.0</AssemblyVersion>
-    <FileVersion>1.0.3.0</FileVersion>
+    <AssemblyVersion>1.0.4.0</AssemblyVersion>
+    <FileVersion>1.0.4.0</FileVersion>
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
@@ -17,4 +17,5 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
+<ItemGroup><Compile Include="../../Shared/OverlayLifetime.cs" Link="Shared/OverlayLifetime.cs" /></ItemGroup>
 </Project>

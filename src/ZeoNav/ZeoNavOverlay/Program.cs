@@ -19,6 +19,10 @@ namespace ZeoNavOverlay
         [STAThread]
         private static void Main(string[] args)
         {
+            using (var lifetime = Zeo.Shared.OverlayLifetime.Attach(args, () => Application.Exit()))
+            {
+                if (lifetime == null) return;
+
             int commandPort = 0;
             int ownerPid = 0;
 
@@ -35,6 +39,8 @@ namespace ZeoNavOverlay
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new OverlayContext(commandPort, ownerPid));
+        
+            }
         }
     }
 
@@ -69,16 +75,6 @@ namespace ZeoNavOverlay
 
         private void Tick(object sender, EventArgs e)
         {
-            if (ownerPid > 0)
-            {
-                try
-                {
-                    Process owner = Process.GetProcessById(ownerPid);
-                    if (owner.HasExited) { ExitThread(); return; }
-                }
-                catch { ExitThread(); return; }
-            }
-
             NavSnapshot s = receiver.Latest;
             if (s == null) return;
             last = s;

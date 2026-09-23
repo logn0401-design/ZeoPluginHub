@@ -15,6 +15,7 @@ namespace ZeoCore
         private readonly UdpClient _udp = new UdpClient();
         private readonly IPEndPoint _endpoint = new IPEndPoint(IPAddress.Loopback, Port);
         private DateTime _lastLaunchAttemptUtc = DateTime.MinValue;
+        private readonly Zeo.Shared.OverlayProcessOwner _owner = new Zeo.Shared.OverlayProcessOwner();
         private long _sent;
         private string _lastError = "";
 
@@ -26,14 +27,7 @@ namespace ZeoCore
         internal long Sent { get { return _sent; } }
         internal string LastError { get { return _lastError; } }
         internal bool Installed { get { return File.Exists(OverlayExePath); } }
-        internal bool Running
-        {
-            get
-            {
-                try { return Process.GetProcessesByName("ZeoOverlay").Length > 0; }
-                catch { return false; }
-            }
-        }
+        internal bool Running { get { return _owner.Running; } }
 
         internal void EnsureRunning(bool autoLaunch)
         {
@@ -57,7 +51,7 @@ namespace ZeoCore
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                Process.Start(psi);
+                _owner.Start(psi);
                 _lastError = "";
                 Plugin.Log("Capture-safe ZeoOverlay launch requested.");
             }
@@ -129,7 +123,7 @@ namespace ZeoCore
 
         public void Dispose()
         {
-            try { Send(new OverlayPacket { Kind = "command", Command = "shutdown" }); } catch { }
+            _owner.Dispose();
             try { _udp.Close(); } catch { }
         }
     }

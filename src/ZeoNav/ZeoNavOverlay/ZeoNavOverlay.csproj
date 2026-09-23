@@ -8,14 +8,15 @@
     <LangVersion>latest</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <AssemblyVersion>0.1.23.0</AssemblyVersion>
-    <FileVersion>0.1.23.0</FileVersion>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
+<ItemGroup><Compile Include="../../Shared/OverlayLifetime.cs" Link="Shared/OverlayLifetime.cs" /></ItemGroup>
 </Project>
 
 

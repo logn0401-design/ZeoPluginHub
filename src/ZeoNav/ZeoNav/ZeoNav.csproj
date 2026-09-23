@@ -8,8 +8,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <AssemblyVersion>0.1.23.0</AssemblyVersion>
-    <FileVersion>0.1.23.0</FileVersion>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
   </PropertyGroup>
   <Target Name="ValidateBin64Dir" BeforeTargets="ResolveReferences">
     <Error Condition="'$(Bin64Dir)' == ''" Text="Bin64Dir MSBuild property was not supplied." />
@@ -31,6 +31,7 @@
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
+<ItemGroup><Compile Include="../../Shared/OverlayLifetime.cs" Link="Shared/OverlayLifetime.cs" /></ItemGroup>
 </Project>
 
 
