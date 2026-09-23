@@ -113,6 +113,11 @@ namespace ZeoCore
                 (Convert.ToInt32(value) < 0 || Convert.ToInt32(value) >= option.Choices.Length))
                 throw new ArgumentException("Choose one of the listed values.");
             option.Write(Current, value);
+            if(option.Key=="QuickRefillKey" || option.Key=="QuickRefillModifier" || option.Key=="MenuKey" || option.Key=="DistressKey" || option.Key=="DistressEnabled")
+            {
+                string conflict=QuickRefillBinding.Conflict(Current.QuickRefillKey,Current.MenuKey,Current.DistressEnabled,Current.DistressKey);
+                if(conflict!=null){Reload();throw new ArgumentException(conflict);}
+            }
             Current.Save();
             object expected=option.Read(Current);
             Reload();

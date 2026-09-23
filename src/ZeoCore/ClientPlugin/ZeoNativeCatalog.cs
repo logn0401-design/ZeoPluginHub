@@ -124,6 +124,8 @@ namespace ZeoCore
             Bool("CAPTURE","CAPTURE-SAFE RENDERER","Auto-launch ZeoOverlay with the plugin","OverlayAutoLaunch",s => s.OverlayAutoLaunch, (s,v) => { s.OverlayAutoLaunch=v; }),
             Bool("AMMO","AMMO TRACKER","Show AMMUNITION panel","ShowAmmoPanel",s => s.ShowAmmoPanel, (s,v) => { s.ShowAmmoPanel=v; }),
             Bool("AMMO","AMMO TRACKER","Only ammo relevant / stocked on this ship","AmmoOnlyRelevant",s => s.AmmoOnlyRelevant, (s,v) => { s.AmmoOnlyRelevant=v; }),
+            Choice("AMMO","QUICK REFILL","Quick Refill key","QuickRefillKey",ZeoOverlay.QuickRefillBinding.Labels,s => ZeoOverlay.QuickRefillBinding.Index(s.QuickRefillKey),(s,v) => s.QuickRefillKey=ZeoOverlay.QuickRefillBinding.Keys[v]),
+            Choice("AMMO","QUICK REFILL","Quick Refill modifier","QuickRefillModifier",ZeoOverlay.QuickRefillBinding.Modifiers,s => s.QuickRefillModifier,(s,v) => s.QuickRefillModifier=v),
             Number("AMMO","WANT / HAVE TARGETS","40mm PDC WANT","WantPdc40",0,1000000,100,0,s => s.WantPdc40, (s,v) => s.WantPdc40=(int)v),
             Number("AMMO","WANT / HAVE TARGETS","40mm Improvised PDC WANT","WantPdc40Improvised",0,1000000,100,0,s => s.WantPdc40Improvised, (s,v) => s.WantPdc40Improvised=(int)v),
             Number("AMMO","WANT / HAVE TARGETS","50mm PDC WANT","WantPdc50",0,1000000,100,0,s => s.WantPdc50, (s,v) => s.WantPdc50=(int)v),

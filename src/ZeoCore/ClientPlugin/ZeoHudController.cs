@@ -49,6 +49,7 @@ namespace ZeoCore
         private bool _lastTx;
         private bool _lastWritePayload;
         private int _lastMenuKeyFrame = -100000;
+        private readonly ZeoOverlay.QuickRefillKeyLatch _refillKey=new ZeoOverlay.QuickRefillKeyLatch();
         private string _lastSectorId = "";
         private readonly DistressSender _distress;
         private readonly DistressGpsBridge _distressGps = new DistressGpsBridge();
@@ -124,6 +125,7 @@ namespace ZeoCore
             _overlay.EnsureRunning(_settings.OverlayAutoLaunch);
 
             SectorSnapshot sector = SectorIdentity.Capture();
+            PollQuickRefillKey();
             if (!string.Equals(_lastSectorId, sector.Id, StringComparison.Ordinal))
             {
                 if (!string.IsNullOrEmpty(_lastSectorId))
@@ -209,6 +211,28 @@ namespace ZeoCore
             {
                 Plugin.Log("Game-input menu key ERROR: " + ex.GetType().Name + ": " + ex.Message);
             }
+        }
+
+        private void PollQuickRefillKey()
+        {
+            try
+            {
+                var input=MyAPIGateway.Input;var gui=MyAPIGateway.Gui;
+                int key=_settings.QuickRefillKey,modifier=_settings.QuickRefillModifier;
+                bool down=input!=null && key!=0 && input.IsKeyPress((MyKeys)key);
+                bool match=input!=null && ZeoOverlay.QuickRefillBinding.MatchModifiers(modifier,
+                    input.IsAnyCtrlKeyPressed(),input.IsAnyAltKeyPressed(),input.IsAnyShiftKeyPressed());
+                bool allowed=key!=0 && gui!=null && !gui.ChatEntryVisible && !gui.IsCursorVisible &&
+                    Sandbox.Graphics.GUI.MyScreenManager.GetScreenWithFocus() is Sandbox.Game.Gui.MyGuiScreenGamePlay &&
+                    GameWindowState.Capture().Focused;
+                bool conflict=ZeoOverlay.QuickRefillBinding.Conflict(key,(int)_settings.MenuKey,_settings.DistressEnabled,(int)_settings.DistressKey)!=null;
+                if(_refillKey.Poll(key,modifier,down,match,allowed,conflict))
+                {
+                    Plugin.ToggleRefill();
+                    Plugin.Notify(Plugin.RefillStatus,5000);
+                }
+            }
+            catch(Exception ex){Plugin.Log("Quick Refill key: "+ex.Message);}
         }
 
         private void PollDistressKey(int frame, SectorSnapshot sector)

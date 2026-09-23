@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net48</TargetFramework><LangVersion>latest</LangVersion><PlatformTarget>x64</PlatformTarget><NoWarn>$(NoWarn);CS0649</NoWarn></PropertyGroup>
+<ItemGroup><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="All"/><Reference Include="System.Web.Extensions"/><Reference Include="System.Drawing"/>
+<Reference Include="VRage.Math"><HintPath>C:\Program Files (x86)\Steam\steamapps\common\SpaceEngineers\Bin64\VRage.Math.dll</HintPath></Reference>
+<Reference Include="VRage.Input"><HintPath>C:\Program Files (x86)\Steam\steamapps\common\SpaceEngineers\Bin64\VRage.Input.dll</HintPath></Reference>
+<Compile Include="../../src/ZeoCore/ClientPlugin/HudSettings.cs" Link="HudSettings.cs"/>
+<Compile Include="../../src/ZeoCore/ClientPlugin/HudModels.cs" Link="HudModels.cs"/>
+<Compile Include="../../src/ZeoCore/ClientPlugin/ZeoNativeCatalog.cs" Link="ZeoNativeCatalog.cs"/>
+<Compile Include="../../src/ZeoCore/ClientPlugin/ZeoNativeSettingsModel.cs" Link="ZeoNativeSettingsModel.cs"/>
+<Compile Include="../../src/ZeoCore/ZeoOverlay/OverlaySettings.cs" Link="OverlaySettings.cs"/>
+<Compile Include="../../src/ZeoCore/ZeoOverlay/HudLayout.cs" Link="HudLayout.cs"/>
+<Compile Include="../../src/ZeoCore/ZeoOverlay/QuickRefillBinding.cs" Link="QuickRefillBinding.cs"/>
+</ItemGroup></Project>

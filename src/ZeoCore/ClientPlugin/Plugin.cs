@@ -8,7 +8,7 @@ namespace ZeoCore
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.0.2-HUD-RESIZE";
+        public const string Version = "1.0.3-REFILL-KEYBIND";
         public static Plugin Instance { get; private set; }
 
         // Pulsar supplies the matching, hash-verified overlay before Init.

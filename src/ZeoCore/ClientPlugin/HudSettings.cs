@@ -40,6 +40,8 @@ namespace ZeoCore
         public bool ShowShipSpeed { get; set; } = true;
         public int FusionReserveTarget { get; set; } = 2000;
         public bool ShowAmmoPanel { get; set; } = true;
+        public int QuickRefillKey { get; set; }
+        public int QuickRefillModifier { get; set; } = 1;
         // ZEOCORE_V067H4_AMMO_TYPE_VISIBILITY
         public bool ShowAmmoPdc40 { get; set; } = true;
         public bool ShowAmmoPdc40Improvised { get; set; } = true;
@@ -569,6 +571,8 @@ namespace ZeoCore
         {
             Profile = (HudProfile)Clamp((int)Profile, 0, 4);
             MenuKey = (HudMenuKey)Clamp((int)MenuKey, 0, 4);
+            QuickRefillKey=ZeoOverlay.QuickRefillBinding.NormalizeKey(QuickRefillKey);
+            QuickRefillModifier=ZeoOverlay.QuickRefillBinding.NormalizeModifier(QuickRefillModifier);
             MenuPage = (HudMenuPage)Clamp((int)MenuPage, 0, 10);
             MarkerStyle = (HudMarkerStyle)Clamp((int)MarkerStyle, 0, 3);
             ScopeSort = (HudScopeSort)Clamp((int)ScopeSort, 0, 5);
