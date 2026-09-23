@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Core</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.1 — Tactical HUD, ship status and shared fleet contacts.</Tooltip>
-  <Description>Zeo Core 1.0.1 brings tactical ship markers, the TOS scope, ship and ammunition status, a friendly fleet roster, Battle Manager contact sharing, and a configurable HUD with draggable panels. Saves distress GPS waypoints from all received sectors, hidden from the game HUD by default. Includes the native Zeo settings menu and matching external overlay. Windows / Pulsar Legacy. Sharing requires compatible server telemetry and Battle Manager settings.</Description>
+  <Tooltip>1.0.2 — Resizable tactical HUD and docked Quick Refill.</Tooltip>
+  <Description>Zeo Core 1.0.2 adds independent HUD width/height resizing with proportional text and fitted columns. HOME &gt; LAYOUT &gt; EDIT HUD LAYOUT includes Save, Cancel, Undo and Reset Size. HOME &gt; AMMO &gt; QUICK REFILL / CANCEL tops up ammo WANT deficits through a docked conveyor connection and refills working ship tanks, then restores their stockpile modes. Includes tactical markers, scope, ship and ammo status, fleet roster, Battle Manager sharing, and hidden distress GPS from all received sectors. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>4a99e20b34cbf0cf0d8ac1dbc51bb104e5dbf5d5</Commit>
+  <Commit>4c70d7d38d81ffb78cb4263152e1b85372f464e2</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoCore/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.1/ZeoCore.Runtime.dll" Sha256="6815954f2eefb2f31be517b3d417455e7052772fd64ba5bd0b213ec1c7078369" Reference="true" />
-  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.1/ZeoOverlay.zip" Sha256="e4d4c8d799ad12b64d6807adb239a24092e3d8403de1b6647ee5e54d374831d9" Extract="true" />
+  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.2/ZeoCore.Runtime.dll" Sha256="6ff63b3d130bb831d5f543f5081ed7dd84c3230c702a4264240091ee3cea6442" Reference="true" />
+  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.2/ZeoOverlay.zip" Sha256="b0e30ad98b0c365581818c26a91159e8efb88b37cb454dfa923854d461f6f770" Extract="true" />
 </PluginData>
