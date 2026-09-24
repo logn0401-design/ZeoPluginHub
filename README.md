@@ -4,9 +4,9 @@ Zeo plugins for Space Engineers 1 on Windows with Pulsar Legacy.
 
 | Plugin | Public release | Purpose |
 | --- | --- | --- |
-| Zeo Core | 1.0.1 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
-| Zeo Nav | 1.0.2 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
-| Zeo Ore Helper | 1.0 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
+| Zeo Core | 1.0.6 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
+| Zeo Nav | 1.0.3 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
+| Zeo Ore Helper | 1.0.2 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
 
 ## Add the catalog
 
@@ -25,11 +25,15 @@ Apply and refresh sources. Enable **Zeo Core**, **Zeo Nav** or **Zeo Ore Helper*
 
 Close Space Engineers and all Zeo overlays before refreshing and restarting. A leftover overlay process can lock files in Pulsar's cache and prevent an update. Pulsar checks source metadata at startup, subject to cache age, or when sources are explicitly refreshed. Updates load after a full restart.
 
-Plugin IDs, settings locations and working runtime assets are preserved by this 1.0 naming release. The public release number is 1.0; internal build identifiers currently remain Core V1.4h, Nav v0.1.23 and Ore Helper v0.7.2. These are the same runtime builds, not a functional replacement or a completed backend security migration.
+Each plugin has its own release version. Updates include matching runtime and overlay assets and preserve existing settings. These plugin updates do not complete the separate backend authorization migration.
+
+## Current HUD update
+
+Core 1.0.6 removes retained Spectrum ghost signals, stabilizes confirmed contact numbers and adds aggregate performance timings. Nav 1.0.3 and Ore Helper 1.0.2 add edge/corner resizing. Across all three, width adjusts columns and height scales rows/text without overwriting font preferences. Nav retains its SDX drive catalog and GPS search. [Changes, test evidence and limitations](docs/HUD_CONSISTENCY_2026-09-24.md).
 
 ## Feature notes
 
-- **Core:** Includes configurable draggable HUD panels and a native Zeo settings menu. Locally available tracked ships use live position anchors; remote-only tracks still depend on telemetry and prediction. The external overlay has some display latency. Battle Manager sharing requires compatible telemetry and configuration; the existing open-test sharing endpoints have not yet completed the authenticated migration.
+- **Core:** Includes configurable draggable HUD panels and a native Zeo settings menu. Spectrum / Auto follows the native Spectrum signal timing and position; Grid Center remains available for locally replicated entities. Remote tracks still depend on telemetry and prediction. The external overlay has some display latency. Battle Manager sharing requires compatible telemetry and configuration; the existing open-test sharing endpoints have not yet completed the authenticated migration.
 - **Nav:** Includes the matching external HUD, Epstein main-drive support and own-ship Spectrum signature information. Spectrum features require compatible world/server telemetry. See [Zeo Nav guide](docs/ZEO-NAV.md).
 - **Ore Helper:** Search starts off each launch. Nearby deposit guidance defaults to 5 km. Ore quantities are sampled estimates, not exact server totals. Existing selections, HUD positions and learned data are preserved. See [Ore Helper guide](docs/ORE_HELPER.md).
 - **PDC:** Distributed separately as a local package. Its 1.0 rebrand and rebuilt installer are pending; this catalog does not yet install it. Its bank-queue planner remains observational and is not a completed replacement for native target control.
