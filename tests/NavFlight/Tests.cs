@@ -27,6 +27,7 @@ internal static partial class Tests
     private static int Run()
     {
         CatalogTests();
+        DriveGpsTests();
         AttitudeTests();
         ServerTests();
         double weak = .1f, strong = .4f;

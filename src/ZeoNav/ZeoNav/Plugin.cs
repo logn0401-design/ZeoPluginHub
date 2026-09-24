@@ -20,7 +20,7 @@ namespace ZeoNav
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.0.1-OVERLAY-LIFETIME";
+        public const string Version = "1.0.2-DRIVE-CATALOG-GPS-SEARCH";
         private string catalogOverlayPath;
 
         // Pulsar supplies this hash-verified package before Init. Settings remain in dataDir.

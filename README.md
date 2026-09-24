@@ -5,7 +5,7 @@ Zeo plugins for Space Engineers 1 on Windows with Pulsar Legacy.
 | Plugin | Public release | Purpose |
 | --- | --- | --- |
 | Zeo Core | 1.0.1 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
-| Zeo Nav | 1.0 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
+| Zeo Nav | 1.0.2 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
 | Zeo Ore Helper | 1.0 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
 
 ## Add the catalog
@@ -45,3 +45,7 @@ Active distress locations received from any sector now save to the normal Space 
 Uses the existing main Zeo Core catalog entry; the separate inventory candidate is not included. Refresh Pulsar sources and fully restart the game. Keep only the main Zeo Core enabled.
 
 Core and overlay builds, 25 GPS lifecycle/API-adapter tests and the installed Pulsar entry-point compiler passed. Multiplayer save/rejoin, sector transfer and NavOS runtime behavior still need in-game verification. Full details are in docs/DISTRESS_GPS_1.0.1.md.
+
+## Zeo Nav 1.0.2 — main drives and GPS search
+
+All 31 inspected SDX main-drive variants now have explicit built-in entries. Type in SEARCH GPS beside the native dropdown to narrow destinations by name, choose a result and start. The 1.0.1 overlay-lifetime fix is retained. Refresh Pulsar sources and fully restart. [Drive catalog and validation](docs/ZEO-NAV-1.0.2.md).

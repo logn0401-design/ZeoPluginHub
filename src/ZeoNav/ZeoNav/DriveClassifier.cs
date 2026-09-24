@@ -12,6 +12,7 @@ namespace ZeoNav
             string display = (displayName ?? "").ToLowerInvariant();
             int slash = id.LastIndexOf('/');
             string subtype = slash >= 0 ? id.Substring(slash + 1) : id;
+            if (MainDriveCatalog.Contains(subtype)) return true;
             if (subtype.StartsWith("sdx_drive", StringComparison.Ordinal)) return true;
             if (id.Contains("epstein") || display.Contains("epstein")) return true;
             if (id.Contains("rcs") || display.Contains("rcs") ||

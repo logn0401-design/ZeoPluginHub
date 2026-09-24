@@ -8,8 +8,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <FileVersion>1.0.1.0</FileVersion>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
   </PropertyGroup>
   <Target Name="ValidateBin64Dir" BeforeTargets="ResolveReferences">
     <Error Condition="'$(Bin64Dir)' == ''" Text="Bin64Dir MSBuild property was not supplied." />

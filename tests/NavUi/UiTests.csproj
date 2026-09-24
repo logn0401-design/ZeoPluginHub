@@ -67,6 +67,7 @@
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows.Forms" />
     <Compile Include="..\..\src\ZeoNav\ZeoNav\*.cs" />
+    <Compile Include="..\..\src\Shared\OverlayLifetime.cs" Link="Shared\OverlayLifetime.cs" />
     <Reference Include="System.Drawing" />
   </ItemGroup>
 </Project>

@@ -60,6 +60,12 @@ namespace ZeoNav
         private MyGuiControlLabel _status,_ship,_trip,_signal,_approach;
         private NavNativeColorScreen _colorScreen;
         private DateTime liveAt=DateTime.MinValue;
+        private string _gpsQuery="";
+        private bool _filteringGps;
+        private MyGuiControlCombobox _gpsCombo;
+        private MyGuiControlTextbox _gpsSearch;
+        private List<GpsDto> _gpsChoices=new List<GpsDto>();
+        private List<GpsDto> _gpsSource=new List<GpsDto>();
         internal NavNativeSettingsScreen(NavUiHost host)
             : base(new Vector2(.5f,.5f),new Vector4(.105f,.145f,.165f,.97f),new Vector2(.80f,.78f),true)
         {
@@ -81,6 +87,7 @@ namespace ZeoNav
             {
                 liveAt=DateTime.UtcNow;
                 NavSnapshot s=host.Snapshot();
+                if(_gpsCombo!=null && !GpsSearch.SameList(_gpsSource,s.Gps)) RefreshGpsChoices();
                 if(_ship!=null) { _ship.Text=Short("MAIN "+s.ForwardWorkingMainDriveCount+"/"+s.ForwardMainDriveCount+" READY // "+s.Phase+" // "+s.Ship,64); _ship.SetToolTip(s.DriveScanSummary??""); }
                 if(_trip!=null) { _trip.Text="SPD "+s.SpeedMps.ToString("0")+" m/s  //  ETA "+(s.EtaSeconds>=0 ? TimeSpan.FromSeconds(s.EtaSeconds).ToString(@"hh\:mm\:ss") : "WAIT")+"  //  CMD "+(s.ForwardCommandRatio*100).ToString("0")+"%"; }
                 if(_signal!=null) { _signal.Text=Short(s.SpectrumKmReady ? "OWN SIG "+s.SpectrumDriveKm.ToString("0.0")+" / "+s.MaxDriveSigKm.ToString("0")+" km  //  "+s.SignalGovernorState : s.SignalGovernorState,83); _signal.SetToolTip((s.WarningText??"")+"\n"+s.SpectrumKmSource+"\nSpherical strong/weak: "+s.SphericalStrongKm.ToString("0.0")+" / "+s.SphericalWeakKm.ToString("0.0")+" km\nDirectional strong/weak: "+s.DirectionalStrongKm.ToString("0.0")+" / "+s.DirectionalWeakKm.ToString("0.0")+" km"); }
@@ -110,6 +117,7 @@ namespace ZeoNav
             try
             {
                 _model.Reload(); FocusedControl=null; Controls.Clear(); _editors.Clear(); _ship=_trip=_signal=_approach=null;
+                _gpsCombo=null; _gpsSearch=null;
                 AddCaption("ZEO NAV // FLIGHT CONTROL",new Vector4(.82f,.91f,.94f,1),new Vector2(0,-.346f),.82f);
                 for(int i=0;i<NavUiCatalog.Pages.Length;i++)
                 {
@@ -121,7 +129,7 @@ namespace ZeoNav
                 var rows=NavUiCatalog.Options.Where(o=>o.Page==NavUiCatalog.Pages[_page]).ToArray();
                 int views=Math.Max(1,(rows.Length+RowsPerView-1)/RowsPerView);
                 int view=LastViews[_page]=Math.Max(0,Math.Min(views-1,LastViews[_page]));
-                Label(-.354f,-.231f,NavUiCatalog.Pages[_page]+(_page==0 ? "  //  v0.1.23" : "  /  "+(view+1)+" OF "+views),.68f);
+                Label(-.354f,-.231f,NavUiCatalog.Pages[_page]+(_page==0 ? "  //  v1.0.2" : "  /  "+(view+1)+" OF "+views),.68f);
                 if(_page==0)
                 {
                     BuildGps();
@@ -150,18 +158,52 @@ namespace ZeoNav
         }
         private void BuildGps()
         {
-            NavSnapshot snapshot=host.Snapshot(); var list=snapshot.Gps ?? new List<GpsDto>();
-            var combo=new MyGuiControlCombobox(new Vector2(0,-.166f),new Vector2(.708f,.043f),openAreaItemsCount:7,
+            Label(-.354f,-.197f,"SEARCH GPS",.42f);
+            _gpsSearch=new MyGuiControlTextbox(new Vector2(-.238f,-.166f),_gpsQuery,128,null,.60f);
+            _gpsSearch.Size=new Vector2(.232f,.043f);
+            _gpsSearch.SetToolTip("Type any part of a GPS name. Multiple words narrow the list. Clear to show all. Choose a result before START ROUTE.");
+            Controls.Add(_gpsSearch);
+            var combo=_gpsCombo=new MyGuiControlCombobox(new Vector2(.123f,-.166f),new Vector2(.462f,.043f),openAreaItemsCount:7,
                 originAlign:MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,isAutoscaleEnabled:true,isAutoEllipsisEnabled:true,minTextScale:.55f);
-            for(int i=0;i<list.Count;i++) combo.AddItem(i,list[i].Name+"  ("+(list[i].Distance/1000).ToString("0.0")+" km)");
-            if(list.Count==0) { host.Select(null); combo.AddItem(-1,"No GPS destinations available"); combo.SelectItemByKey(-1); combo.Enabled=false; }
-            else
-            {
-                int selected=host.Selected==null ? 0 : list.FindIndex(g=>g.Name==host.Selected.Name && g.X==host.Selected.X && g.Y==host.Selected.Y && g.Z==host.Selected.Z);
-                selected=Math.Max(0,selected); combo.SelectItemByKey(selected); host.Select(list[selected]);
-            }
-            combo.ItemSelected+=delegate { int i=(int)combo.GetSelectedKey(); if(!_building && i>=0 && i<list.Count && CommitEditors()) host.Select(list[i]); };
+            combo.ItemSelected+=delegate {
+                int i=(int)combo.GetSelectedKey();
+                if(_building || _filteringGps) return;
+                if(i<0) { host.Select(null); return; }
+                if(i>=_gpsChoices.Count) return;
+                if(CommitEditors()) host.Select(_gpsChoices[i]);
+                else RefreshGpsChoices();
+            };
             Controls.Add(combo);
+            RefreshGpsChoices();
+            _gpsSearch.TextChanged+=delegate {
+                if(_building) return;
+                _gpsQuery=_gpsSearch.Text; RefreshGpsChoices();
+            };
+            _gpsSearch.EnterPressed+=delegate { FocusedControl=combo; };
+        }
+        private void RefreshGpsChoices()
+        {
+            if(_gpsCombo==null) return;
+            _filteringGps=true;
+            try
+            {
+                var all=host.Snapshot().Gps;
+                _gpsSource=GpsSearch.Filter(all,"");
+                _gpsChoices=GpsSearch.Filter(all,_gpsQuery);
+                int selected=GpsSearch.SelectedIndex(_gpsChoices,host.Selected);
+                // Filtering never silently selects a different destination or starts a route.
+                if(selected<0) host.Select(null);
+                _gpsCombo.ClearItems();
+                _gpsCombo.AddItem(-1,_gpsChoices.Count==0 ? (all==null || all.Count==0 ? "No GPS destinations available" : "No matching GPS — clear search") : "Select GPS ("+_gpsChoices.Count+" matches)");
+                for(int i=0;i<_gpsChoices.Count;i++)
+                {
+                    var g=_gpsChoices[i];
+                    _gpsCombo.AddItem(i,(g.Name ?? "Unnamed GPS")+"  ("+(g.Distance/1000).ToString("0.0")+" km)");
+                }
+                _gpsCombo.SelectItemByKey(selected);
+                _gpsCombo.Enabled=_gpsChoices.Count>0;
+            }
+            finally { _filteringGps=false; }
         }
         private void RunAction(Action action)
         {
@@ -390,4 +432,3 @@ namespace ZeoNav
     }
 
 }
-

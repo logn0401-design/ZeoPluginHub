@@ -14,7 +14,9 @@ internal static class ValidateCatalog
     private static int Main(string[] args)
     {
         string repo = Path.GetFullPath(args[0]);
-        string runtime = Path.Combine(repo, "assets/zeonav/0.1.23/ZeoNav.Runtime.dll");
+        string descriptor = Path.Combine(repo, "Plugins/ZeoNav.xml");
+        var xml = XDocument.Load(descriptor).Root;
+        string runtime = Path.Combine(repo, xml.Elements("Asset").Single(a => (string)a.Attribute("Name") == "ZeoNavRuntime").Attribute("Path").Value);
         string scratch = Path.GetFullPath(args[4]);
         Directory.CreateDirectory(scratch);
         AppDomain.CurrentDomain.AssemblyResolve += (s, e) => {
@@ -26,13 +28,11 @@ internal static class ValidateCatalog
             }
             return null;
         };
-        string descriptor = Path.Combine(repo, "Plugins/ZeoNav.xml");
         var shared = Assembly.LoadFrom(Path.Combine(args[2], "Pulsar.Shared.dll"));
         var serializer = new XmlSerializer(shared.GetType("Pulsar.Shared.Data.PluginData", true));
         object pluginData;
         using (var reader = File.OpenRead(descriptor)) pluginData = serializer.Deserialize(reader);
         Require(pluginData.GetType().Name == "GitHubPlugin", "Installed Pulsar deserializes Nav descriptor");
-        var xml = XDocument.Load(descriptor).Root;
         Require(xml.Element("Id").Value == "logn0401-design/ZeoPluginHub.ZeoNav", "Unique Nav catalog ID");
         Require(xml.Element("SourceDirectories").Element("Directory").Value == "loader/ZeoNav/", "Only the Nav loader is compiled");
         foreach (var asset in xml.Elements("Asset")) {
@@ -42,7 +42,7 @@ internal static class ValidateCatalog
             Require(hash.Equals(asset.Attribute("Sha256").Value, StringComparison.OrdinalIgnoreCase), "Verified " + asset.Attribute("Name").Value);
         }
         string overlay = Path.Combine(scratch, "overlay-" + Guid.NewGuid().ToString("N"));
-        string zip = Path.Combine(repo, "assets/zeonav/0.1.23/ZeoNavOverlay.zip");
+        string zip = Path.Combine(repo, xml.Elements("Asset").Single(a => (string)a.Attribute("Name") == "ZeoNavOverlayPackage").Attribute("Path").Value);
         using (var archive = ZipFile.OpenRead(zip)) Require(archive.Entries.Select(e => e.FullName).OrderBy(n => n).SequenceEqual(new[] { "ZeoNavOverlay.exe", "ZeoNavOverlay.exe.config" }), "Overlay archive contains exactly the matching executable and config");
         ZipFile.ExtractToDirectory(zip, overlay);
         var loader = Assembly.LoadFrom(args[3]);
