@@ -4,12 +4,12 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Ore Helper</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.2 — Ore search and deposit guidance with resizable HUD.</Tooltip>
-  <Description>Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. Resize the list HUD from its edges and corners; text follows panel height. Quantities are estimates. Search starts off each launch. Includes automatic overlay shutdown. Windows / Pulsar Legacy.</Description>
+  <Tooltip>1.0.3 — Native click-to-bind menu key, resizable HUD and ore guidance.</Tooltip>
+  <Description>Learned ore search, configurable pings, optional SDX2 estimates and approximate nearby deposits. MENU KEY in the native footer supports click, key press, CLEAR and APPLY without opening legacy settings. Preserves 1.0.2 HUD resizing and automatic overlay shutdown. Search starts off each launch. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>0db8babe4d24432bd72b6127721afc583db0342a</Commit>
+  <Commit>f54c0a34050f53a3c81f5549e660426ce130c13f</Commit>
   <SourceDirectories><Directory>loader/ZeosOreHelper/</Directory></SourceDirectories>
-  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/1.0.2/ZeosOreHelper.Runtime.dll" Sha256="b24fe25f36b8af8fbdc4b71559d10638c98dcd41983b45f955bc7fad5d6b3bb7" Reference="true" />
-  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/1.0.2/ZeosOreOverlay.zip" Sha256="b3c079fd51a795bd81f04836b134a498a863a71f5b329a6ee0bd96b01ffd590a" Extract="true" />
+  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/1.0.3/ZeosOreHelper.Runtime.dll" Sha256="050331b5c349d5c06a22670436e97e715f9a5774b68a9ef3534ea17b1c02e979" Reference="true" />
+  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/1.0.3/ZeosOreOverlay.zip" Sha256="32c8adc5eaa8eb728d74c1e685c5b1b7e1b18e3b55f65db346119919bbf6e165" Extract="true" />
 </PluginData>
