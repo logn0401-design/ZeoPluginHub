@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Core</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.6 — Spectrum-aligned markers, stable tracks and responsive HUD text.</Tooltip>
-  <Description>Tactical HUD, ship status, ammunition targets and Quick Refill, shared contacts, hidden distress GPS, and observed combat telemetry. Spectrum / Auto follows native Spectrum signal timing. HUD width adjusts columns; height scales rows and text. Includes capture controls and automatic overlay shutdown. Windows / Pulsar Legacy.</Description>
+  <Tooltip>1.0.7 — Docked refill: compatible weapons, native fuel, gas tanks and cargo unloading.</Tooltip>
+  <Description>Tactical HUD, Spectrum-aligned signals, shared contacts, hidden distress GPS and combat telemetry. Dedicated REFILL tab: click-to-bind shortcut, compatible weapon loading, native SDX2 fusion pellets, oxygen/fuel gas tank refill, optional cargo unloading, and reinforced cargo priority for ammunition reserves. Includes responsive HUD resizing and automatic overlay shutdown. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>0db8babe4d24432bd72b6127721afc583db0342a</Commit>
+  <Commit>eed132eb0ad9700f4d1a9ffce1e898a6c07581f9</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoCore/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.6/ZeoCore.Runtime.dll" Sha256="0a734216331059c2a3ff5a4649e08e77c7fcf0a1f0a9cc8f73b92ca3f0a6bdea" Reference="true" />
-  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.6/ZeoOverlay.zip" Sha256="3f47d0103af5b905b87fc7a48bdd72bff3f80dfd1aea15bac0dc99b5ae3359ac" Extract="true" />
+  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.7/ZeoCore.Runtime.dll" Sha256="877cc96b4977f2e0a8b0c9e36cd718d4f37e3a6733ade2e6656702137ea20183" Reference="true" />
+  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.7/ZeoOverlay.zip" Sha256="65e036bbfb1b5a52f2196067fb07645bc2cdd36e8bc3e96a2d849a23e50a5c37" Extract="true" />
 </PluginData>

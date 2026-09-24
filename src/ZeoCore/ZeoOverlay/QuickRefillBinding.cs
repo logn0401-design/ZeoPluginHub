@@ -8,7 +8,7 @@ namespace ZeoOverlay
         // dropdown index, so adding a new choice cannot change existing binds.
         internal static readonly int[] Keys;
         internal static readonly string[] Labels;
-        internal static readonly string[] Modifiers={"NONE","CTRL","ALT","SHIFT","CTRL + SHIFT"};
+        internal static readonly string[] Modifiers={"NONE","CTRL","ALT","SHIFT","CTRL + SHIFT","CTRL + ALT","ALT + SHIFT","CTRL + ALT + SHIFT"};
         static QuickRefillBinding()
         {
             var keys=new List<int>{0};var labels=new List<string>{"UNBOUND"};
@@ -38,6 +38,9 @@ namespace ZeoOverlay
                 case 2:return !ctrl&&alt&&!shift;
                 case 3:return !ctrl&&!alt&&shift;
                 case 4:return ctrl&&!alt&&shift;
+                case 5:return ctrl&&alt&&!shift;
+                case 6:return !ctrl&&alt&&shift;
+                case 7:return ctrl&&alt&&shift;
                 default:return false;
             }
         }

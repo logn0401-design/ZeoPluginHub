@@ -12,7 +12,7 @@ internal static class Program
  static int Main(){try{
   Check(new HudSettings().QuickRefillKey==0&&new OverlaySettings().QuickRefillKey==0,"Old settings default to unbound");
   foreach(var key in QuickRefillBinding.Keys){Check(key==0||Enum.IsDefined(typeof(VRage.Input.MyKeys),(byte)key),"Real MyKeys value "+key);Check(QuickRefillBinding.Keys[QuickRefillBinding.Index(key)]==key,"Stable persisted key "+key);}
-  for(int m=0;m<5;m++)for(int mask=0;mask<8;mask++)Check(QuickRefillBinding.MatchModifiers(m,(mask&1)!=0,(mask&2)!=0,(mask&4)!=0)==(mask==new[]{0,1,2,4,5}[m]),"Exact modifier matching");
+  for(int m=0;m<8;m++)for(int mask=0;mask<8;mask++)Check(QuickRefillBinding.MatchModifiers(m,(mask&1)!=0,(mask&2)!=0,(mask&4)!=0)==(mask==new[]{0,1,2,4,5,3,6,7}[m]),"Exact modifier matching");
   var latch=new QuickRefillKeyLatch();Func<bool,bool,bool,bool> poll=(down,allowed,mods)=>latch.Poll(119,1,down,mods,allowed,false);
   Check(!poll(false,true,true),"Initialize without firing");Check(poll(true,true,true),"One keydown starts/cancels");
   for(int i=0;i<100;i++)Check(!poll(true,true,true),"Hold does not repeat");
@@ -32,6 +32,14 @@ internal static class Program
   Reject(()=>model.Apply(ZeoNativeCatalog.Options.Single(x=>x.Key=="DistressKey"),3),"Changing distress onto refill key also rejected");
   model.Apply(keyOption,0);Check(HudSettings.Load().QuickRefillKey==0,"Unbind persists");
   overlay=OverlaySettings.Load(HudSettings.PathName);overlay.QuickRefillKey=999999;overlay.QuickRefillModifier=-1;overlay.Save();Check(HudSettings.Load().QuickRefillKey==0&&HudSettings.Load().QuickRefillModifier==1,"Invalid saved bind normalizes safely");
+  model.SaveRefillBinding(119,7);Check(HudSettings.Load().QuickRefillModifier==7,"Captured three-modifier chord saved atomically");
+  Reject(()=>model.SaveRefillBinding(36,0),"Capture applies same collision guard");
+  model.Apply(ZeoNativeCatalog.Options.Single(x=>x.Key=="RefillUnloadOtherCargo"),true);
+  model.Apply(ZeoNativeCatalog.Options.Single(x=>x.Key=="RefillFuel"),false);
+  Check(HudSettings.Load().RefillUnloadOtherCargo&&!HudSettings.Load().RefillFuel,"New service fields reach runtime");
+  Check(ZeoNativeCatalog.Pages.Contains("REFILL"),"Dedicated refill tab exists");
+  Check(ZeoNativeCatalog.Options.Where(x=>x.Key.StartsWith("Want")).All(x=>x.Page=="REFILL"),"Targets moved to refill, not removed");
+  Check(ZeoNativeCatalog.Options.Count(x=>x.Key=="FusionReserveTarget")==1,"Fuel target moved without duplicating its control");
   Console.WriteLine("PASS: "+checks+" key, modifier, held-input, collision and real-settings checks.");return 0;
  }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}}
 }

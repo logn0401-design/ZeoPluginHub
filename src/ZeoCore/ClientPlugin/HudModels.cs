@@ -218,6 +218,8 @@ namespace ZeoCore
         public string Subtype;
         public double Have;
         public bool Relevant;
+        public bool WeaponCompatible;
+        public long[] WeaponIds = new long[0];
 
         public HudAmmoStock Clone() { return (HudAmmoStock)MemberwiseClone(); }
     }

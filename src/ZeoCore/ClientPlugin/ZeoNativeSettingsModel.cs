@@ -101,6 +101,18 @@ namespace ZeoCore
 
         internal void Reload() { Current=OverlaySettings.Load(_path); }
 
+        internal void SaveRefillBinding(int key,int modifier)
+        {
+            Reload();
+            if(QuickRefillBinding.NormalizeKey(key)!=key || QuickRefillBinding.NormalizeModifier(modifier)!=modifier)
+                throw new ArgumentException("Unsupported binding.");
+            string conflict=QuickRefillBinding.Conflict(key,Current.MenuKey,Current.DistressEnabled,Current.DistressKey);
+            if(conflict!=null)throw new ArgumentException(conflict);
+            Current.QuickRefillKey=key;Current.QuickRefillModifier=modifier;Current.Save();Reload();
+            if(Current.QuickRefillKey!=key || Current.QuickRefillModifier!=modifier)throw new InvalidOperationException("Binding could not be saved.");
+            _changed?.Invoke();
+        }
+
         internal void Apply(NativeOption option, object value)
         {
             // Use the exact same model as SettingsForm. Reload before a mutation so
