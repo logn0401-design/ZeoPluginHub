@@ -32,6 +32,6 @@ internal static partial class Tests {
         model.Apply(option,"f9");Check(ReadHud(path).MenuKey=="F9","key names canonicalized");
         foreach(var key in new[]{"PageUp","PageDown","Insert","Delete","End","F7","F8","F9","F10"})Check(HudSettings.NormalizeMenuKey(key)==key,"old binding preserved: "+key);
         Check(HudSettings.NormalizeMenuKey("broken")=="PageUp","corrupt persisted value has safe default");
-        Check(option.Tab=="ADVANCED"&&option.Group=="HOME / KEYBINDS"&&option.Choices.Contains("None")&&option.Choices.Contains("F12"),"native catalog exposes key capture destination and full choices");
+        Check(option.Tab=="ADVANCED"&&option.Group=="KEYBINDS"&&option.Choices.Contains("None")&&option.Choices.Contains("F12"),"native catalog exposes key capture destination and full choices");
     }
 }

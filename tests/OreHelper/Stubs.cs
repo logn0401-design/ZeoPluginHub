@@ -9,7 +9,7 @@ namespace ZeosOreHelper {
  internal sealed class Plugin {
   internal static string CatalogOverlayPath=null;
   internal static string DataDirectory=System.IO.Path.GetTempPath();
-  internal const string Version="1.0.3";internal static Plugin Instance;
+  internal const string Version="1.0.4";internal static Plugin Instance;
   internal OreSearchConfig Search;internal OreLearningStore Learning,SdxLearning;internal OreDepositSurveyor Deposits=new OreDepositSurveyor();
   internal static void Log(string text){Console.WriteLine(text);}internal void NativeAction(string cmd){}internal void NativeSettingsChanged(){}
  }

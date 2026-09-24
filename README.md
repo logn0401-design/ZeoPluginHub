@@ -6,7 +6,7 @@ Zeo plugins for Space Engineers 1 on Windows with Pulsar Legacy.
 | --- | --- | --- |
 | Zeo Core | 1.0.6 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
 | Zeo Nav | 1.0.3 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
-| Zeo Ore Helper | 1.0.3 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
+| Zeo Ore Helper | 1.0.4 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
 
 ## Add the catalog
 
@@ -59,3 +59,7 @@ All 31 inspected SDX main-drive variants now have explicit built-in entries. Typ
 The native menu now has a **MENU KEY** button in its footer. Click it, click the current key, press a new keyboard key, then **APPLY**. **CLEAR** disables the shortcut only after APPLY. Closing with ESC or navigating away discards the binding draft. Pulsar Configure or `/ore menu` can reopen the menu if the shortcut is disabled.
 
 This follows PDC's menu-key capture pattern and preserves existing bindings. The key can now be any supported non-modifier keyboard key (ESC stays reserved), including keys outside the former short dropdown. This is a single-key menu binding, like PDC's menu key. Ore Helper's shortcut pauses while a binding draft is being edited. The 1.0.2 resizing, text scaling, saved layout and automatic overlay shutdown changes remain intact. Refresh sources and restart to update. [Validation](docs/ORE_KEYBIND_1.0.3.md).
+
+## Ore Helper 1.0.4 — simpler menus
+
+Common search settings have one home on SEARCH, including an ANY / ALL ore-match switch. The footer has one MOVE / RESIZE HUD button and the existing MENU KEY button. Shorter labels, simpler category names, fewer repeated controls and explanatory tooltips make the remaining settings easier to navigate. Existing settings and saved choices are preserved. Refresh Pulsar sources and restart to update. [Validation](docs/ORE_MENU_1.0.4.md).

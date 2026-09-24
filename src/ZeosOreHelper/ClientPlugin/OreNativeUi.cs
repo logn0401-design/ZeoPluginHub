@@ -63,7 +63,7 @@ namespace ZeosOreHelper
         private MyGuiControlLabel _summary; private int _ticks; private DateTime _resetArmed;
         private int _page;
         private bool _building,_rebuild,_committing;
-        private string _message="ENTER / APPLY saves. ESC returns to the game.";
+        private string _message="Click to change settings. Use APPLY for typed values and key bindings.";
         private MyGuiControlLabel _status;
         private OreNativeColorScreen _colorScreen;
         
@@ -104,7 +104,7 @@ namespace ZeosOreHelper
             try
             {
                 _model.Reload(); Controls.Clear(); _editors.Clear();_summary=null;_binding=null;_pollBinding=null;
-                AddCaption("ZEO ORE // PROSPECTOR",new Vector4(.82f,.91f,.94f,1),new Vector2(0,-.378f),.82f);
+                AddCaption("ZEO ORE HELPER",new Vector4(.82f,.91f,.94f,1),new Vector2(0,-.378f),.82f);
                 for(int i=0;i<OreUiCatalog.Pages.Length;i++) {
                     int target=i;
                     var tab=Button(-.30f+(i%6)*.12f,-.323f+(i/6)*.046f,.113f,.041f,OreUiCatalog.Pages[i],delegate {if(!CommitEditors())return;_page=target;LastPage=target;_rebuild=true;},.53f);
@@ -112,7 +112,7 @@ namespace ZeosOreHelper
                 }
                 if(_page==0) BuildSearch();
                 else {
-                    var all=OreUiCatalog.Options.Where(o=>o.Tab==OreUiCatalog.Pages[_page]).ToArray();
+                    var all=OreUiCatalog.NativeOptions(OreUiCatalog.Pages[_page]).ToArray();
                     var groups=all.Select(o=>o.Group).Distinct().ToArray();
                     string group=LastGroups[_page];if(!groups.Contains(group))group=groups[0];LastGroups[_page]=group;
                     var picker=new MyGuiControlCombobox(new Vector2(-.10f,-.248f),new Vector2(.51f,.04f),openAreaItemsCount:7,isAutoscaleEnabled:true,isAutoEllipsisEnabled:true,minTextScale:.5f);
@@ -130,11 +130,10 @@ namespace ZeosOreHelper
                     Button(-.263f,.217f,.18f,.040f,"PREVIOUS",delegate{Navigate(-1);},.58f).Enabled=view>0;
                     Button(.263f,.217f,.18f,.040f,"NEXT",delegate{Navigate(1);},.58f).Enabled=view+1<views;
                     Label(-.035f,.217f,(view+1)+" / "+views,.55f);
-                    if(_page==1)Button(0,.268f,.29f,.04f,"EDIT HUD POSITION",OpenLayout,.55f);
-                    else _summary=Label(-.354f,.273f,Short(host==null?"":Summary(),98),.46f);
+                    _summary=Label(-.354f,.273f,Short(host==null?"":Summary(),98),.46f);
                 }
                 _status=Label(-.354f,.309f,Short(_message,92),.46f);
-                Button(-.205f,.363f,.30f,.043f,"FULL / LEGACY SETTINGS",OpenExternal,.53f);
+                Button(-.205f,.363f,.30f,.043f,"MOVE / RESIZE HUD",OpenLayout,.53f);
                 Button(.054f,.363f,.19f,.043f,"MENU KEY",delegate{if(!CommitEditors())return;_page=5;LastPage=5;LastGroups[5]=Option("MenuKey").Group;LastViews[5]=0;_rebuild=true;},.53f);
                 Button(.258f,.363f,.19f,.043f,"CLOSE",delegate{CloseScreen();},.62f);
             }
@@ -162,10 +161,12 @@ namespace ZeosOreHelper
             Button(.283f,-.019f,.15f,.036f,"LOAD SET",delegate{SaveSelection(false);},.52f);
             AddRow(Option("SearchSort"),.040f);AddRow(Option("BenchmarkPercent"),.094f);
             AddRow(Option("MaxMarkers"),.148f);AddRow(Option("SurveyRangeMeters"),.202f);
-            Button(-.18f,.258f,.34f,.038f,"EDIT HUD POSITION",OpenLayout,.55f);
+            bool allOres=_model.Current.B("RequireAllWantedOres");
+            var matchButton=Button(-.18f,.258f,.34f,.038f,allOres?"ORE MATCH: ALL":"ORE MATCH: ANY",delegate{if(CommitEditors()&&Apply(Option("RequireAllWantedOres"),!allOres))_rebuild=true;},.55f);
+            matchButton.SetToolTip("ANY: match at least one selected ore. ALL: the asteroid must contain every selected ore.");
             double minimum=_model.Current.D("MinimumDistanceMeters");
-            if(minimum>0)Button(.18f,.258f,.34f,.038f,"INCLUDE NEARBY (<"+(minimum/1000).ToString("0.#")+" KM)",delegate{if(CommitEditors()&&Apply(Option("MinimumDistanceMeters"),0d))_rebuild=true;},.50f);
-            else {bool loaded=_model.Current.B("MaxLoadedRange");Button(.18f,.258f,.34f,.038f,loaded?"RANGE: ALL LOADED":"RANGE: DISTANCE LIMIT",delegate{if(CommitEditors()&&Apply(Option("MaxLoadedRange"),!loaded))_rebuild=true;},.51f);}
+            if(minimum>0)Button(.18f,.258f,.34f,.038f,"SHOW NEARBY ASTEROIDS",delegate{if(CommitEditors()&&Apply(Option("MinimumDistanceMeters"),0d))_rebuild=true;},.50f);
+            else {bool loaded=_model.Current.B("MaxLoadedRange");Button(.18f,.258f,.34f,.038f,loaded?"RANGE: ALL LOADED":"RANGE: SET DISTANCE",delegate{if(CommitEditors()&&Apply(Option("MaxLoadedRange"),!loaded))_rebuild=true;},.51f);}
             _summary=Label(-.354f,.289f,Short(Summary(),98),.43f);
         }
         private string Summary(){if(host==null)return "";if(_page==2)return host.Deposits.Status;if(_page==3)return host.Sdx.Status;if(_page==4)return host.LearningDetail(OreUiModel.SelectedOre);double min=_model.Current.D("MinimumDistanceMeters");return (min>0?ZeoOreShared.OreSearchHints.MinimumRange(min)+" | ":"")+host.SearchSummary;}
@@ -183,6 +184,7 @@ namespace ZeosOreHelper
         {
             try
             {
+                if(option.Key=="@legacymenu"){OpenExternal();return true;}
                 if(option.Key=="@LAYOUT") { if(CloseScreen()) OreNativeUi.BeginLayout(host); return true; }
                 if(option.Key=="@saveselection"||option.Key=="@loadselection"){SaveSelection(option.Key=="@saveselection");return true;}
                 if(option.Key=="@resetlearning" && DateTime.UtcNow>_resetArmed){_resetArmed=DateTime.UtcNow.AddSeconds(8);Message("Reset deletes this world's learned records. Click RESET again within 8 seconds to confirm.");return false;}
@@ -194,41 +196,48 @@ namespace ZeosOreHelper
         {
             var label=Label(-0.35364f,y-0.004f,Short(option.Label,38),0.62f);
             label.SetToolTip(option.Section+"\n"+option.Label+Help(option));
-            Label(-0.35364f,y+0.015f,option.Section,0.40f);
+
             if(option.Key=="MenuKey") {AddKeyBinding(option,y);}
             else if(option.Kind==OreOptionKind.Boolean)
             {
                 bool value=Convert.ToBoolean(option.Read(_model.Current));
                 MyGuiControlButton on=null,off=null;
-                var state=Label(0.07392f,y,value ? "ON" : "OFF",0.65f);
                 Action<bool> choose=delegate(bool selected) {
                     if(!CommitEditors() || !Apply(option,selected)) return;
-                    SetToggleState(on,off,state,selected);
+                    SetToggleState(on,off,selected);
                     if(option.Key=="StreamerMode" || option.Key=="StreamerFailClosed") _rebuild=true;
                 };
                 on=Button(0.19488f,y,0.07980f,0.041f,"ON",delegate { choose(true); });
                 off=Button(0.28812f,y,0.07980f,0.041f,"OFF",delegate { choose(false); });
-                SetToggleState(on,off,state,value);
+                SetToggleState(on,off,value);
             }
             else if(option.Kind==OreOptionKind.Choice) Choice(option,0.23100f,y,0.24696f);
             else if(option.Kind==OreOptionKind.Action)
-                Button(0.23100f,y,0.24696f,0.041f,option.Label,delegate {
+                Button(0.23100f,y,0.24696f,0.041f,OreUiCatalog.ActionLabel(option.Key),delegate {
                     if(CommitEditors() && Apply(option,null)) _rebuild=true;
                 },0.59f);
             else AddEditor(option,y);
         }
-        private static void SetToggleState(MyGuiControlButton on,MyGuiControlButton off,MyGuiControlLabel state,bool value)
+        private static void SetToggleState(MyGuiControlButton on,MyGuiControlButton off,bool value)
         {
             on.Text=value ? "[X] ON" : "ON";
             off.Text=value ? "OFF" : "[X] OFF";
             on.Selected=value; off.Selected=!value;
             on.ColorMask=value ? new Vector4(0.75f,0.95f,1f,1f) : new Vector4(0.35f,0.43f,0.47f,1f);
             off.ColorMask=!value ? new Vector4(0.75f,0.95f,1f,1f) : new Vector4(0.35f,0.43f,0.47f,1f);
-            state.Text=value ? "ON" : "OFF";
         }
 
         private static string Help(OreOption option)
         {
+            if(option.Key=="BenchmarkPercent"||option.Key=="OreBenchmarkPercent:")return "\n80 means at least 80% of the best saved amount, or percentage in Highest ore percentage mode. The minimum starts after three detailed scans.";
+            if(option.Key=="SurveyRangeMeters")return "\nMaximum scan distance. Ignored when RANGE: ALL LOADED is selected. Only loaded asteroids can be scanned.";
+            if(option.Key=="MaxMarkers")return "\nTotal asteroid and deposit ping limit. 0 hides all pings.";
+            if(option.Key=="MaxDepositMarkers")return "\nDeposit pings use this many slots from the total Maximum pings on SEARCH.";
+            if(option.Key=="PreferSdxScans")return "\nUse completed SDX2 client scans when available. Saved amounts may be out of date; they are estimates.";
+            if(option.Key=="@usebenchmarks")return "\nRecalculate minimums from your best saved scans for this world.";
+            if(option.Key=="@resetlearning")return "\nDelete this world's learned records. Requires a second click to confirm.";
+            if(option.Group=="BACKUP MENU")return "\nOnly affects the older external settings window. The native menu already contains all settings.";
+            if(option.Key=="PingShowNumber"||option.Key=="PingShowGrade"||option.Key=="PingShowDistance"||option.Key=="PingShowDiameter"||option.Key=="PingShowTopOre"||option.Key=="PingShowOrePercent"||option.Key=="PingShowScanStatus")return "\nUsed when Ping label style is Custom. Simple labels show ore and distance.";
             if(option.Key=="PingLabelStyle")return "\nSimple: ore + distance. Target detail adds estimated amount only when aimed. Custom uses all information toggles below.";
             if(option.Key=="MinimumDistanceMeters")return "\nAsteroids disappear inside this radius. Use 0 to include nearby asteroids.";
             if(option.Kind==OreOptionKind.Number) return "\nRange: "+option.Min+" to "+option.Max+". Step: "+option.Step;
@@ -289,13 +298,13 @@ namespace ZeosOreHelper
         private void Choice(OreOption option,float x,float y,float width)
         {
             var combo=new MyGuiControlCombobox(new Vector2(x,y),new Vector2(width,0.041f),openAreaItemsCount:6,
-                toolTip:option.Label,originAlign:MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,
+                toolTip:option.Label+Help(option),originAlign:MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,
                 isAutoscaleEnabled:true,isAutoEllipsisEnabled:true,minTextScale:0.55f);
             var choices=option.Choices.ToList();
             string current=Convert.ToString(option.Read(_model.Current));
             int selected=choices.FindIndex(v=>v.Equals(current,StringComparison.OrdinalIgnoreCase));
             if(selected<0){selected=choices.Count;choices.Add(current.Length==0?"(unset)":current);}
-            for(int i=0;i<choices.Count;i++) combo.AddItem(i,choices[i]);
+            for(int i=0;i<choices.Count;i++) combo.AddItem(i,OreUiCatalog.ChoiceLabel(option.Key,choices[i]));
             combo.SelectItemByKey(selected);
             combo.ItemSelected+=delegate {
                 if(_building) return;

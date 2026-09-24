@@ -16,7 +16,7 @@ namespace ZeosOreHelper
     public sealed class Plugin : IPlugin
     {
         public const string Name="Zeos Ore Helper";
-        public const string Version="1.0.3-NATIVE-KEYBIND";
+        public const string Version="1.0.4-MENU-CLEANUP";
         internal static string CatalogOverlayPath {get;private set;}
         public void LoadAssets(IReadOnlyDictionary<string,string> assets) {
             string directory;
