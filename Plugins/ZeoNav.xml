@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Nav</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.1 — GPS navigation, speed control and flip-and-burn guidance. Overlay shutdown fix.</Tooltip>
-  <Description>Zeo Nav 1.0.1 provides GPS navigation, speed control, flip-and-burn guidance, precision attitude controls, Epstein main-drive support, and a compact navigation HUD with the native Zeo settings menu. Own-ship Spectrum signature information requires compatible world/server telemetry. Windows / Pulsar Legacy. The overlay now closes with its owning game or after its game window is destroyed, including crash recovery and plugin unload.</Description>
+  <Tooltip>1.0.2 — 31 built-in SDX main-drive variants and searchable GPS dropdown.</Tooltip>
+  <Description>Zeo Nav 1.0.2 adds an explicit catalog of all 31 inspected SDX main-drive variants and a search field beside the native GPS dropdown. Type part of a name, select a match, then start. Preserves precision attitude, own-ship Spectrum limits and automatic overlay shutdown. Requires compatible world/server telemetry for Spectrum features. Windows / Pulsar Legacy. Disable old local Nav entries, refresh sources and fully restart to update.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>a6d958711b6b02da6a247049e063e7e406e4d0fa</Commit>
+  <Commit>8f6ac432ac4061e5c1e7dc3cdd349394674307d3</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoNav/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.0.1/ZeoNav.Runtime.dll" Sha256="47e4d85bf986145a5098051eed715568cc63c7771079964397dcc3c96114e2d3" Reference="true" />
-  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.0.1/ZeoNavOverlay.zip" Sha256="c8f4b7e7c387c203fffc5c84b9c7788792522299bb34d8c1dec5d1a44a8a21c6" Extract="true" />
+  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.0.2/ZeoNav.Runtime.dll" Sha256="165da731c036dbe88c53dabcc0c1f3d5eb0bb0c260fe404f915d088ce1df5532" Reference="true" />
+  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.0.2/ZeoNavOverlay.zip" Sha256="3449962f231b9b17d502927e075417d36403c3762b9237aab03bc290b9cb797b" Extract="true" />
 </PluginData>
