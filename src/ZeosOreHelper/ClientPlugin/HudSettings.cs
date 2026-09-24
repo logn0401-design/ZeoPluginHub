@@ -419,7 +419,7 @@ namespace ZeosOreHelper
         public static string NextGrade(string grade,bool includeX){string g=NormalizeGrade(grade,includeX?"X":"D");if(includeX){if(g=="X")return"D";if(g=="D")return"C";if(g=="C")return"B";if(g=="B")return"A";if(g=="A")return"S";return"X";}if(g=="D")return"C";if(g=="C")return"B";if(g=="B")return"A";if(g=="A")return"S";return"D";}
         public static string NormalizeGrade(string grade,string fallback){string g=(grade??"").Trim().ToUpperInvariant();return g=="S"||g=="A"||g=="B"||g=="C"||g=="D"||g=="X"?g:fallback;}
         public static string NormalizeRankingMode(string mode){string m=(mode??"").Trim().ToLowerInvariant();if(m=="nearest")return"nearest";if(m=="quality_distance"||m=="distance"||m=="quality+distance")return"quality_distance";return"quality";}
-        public static string NormalizeMenuKey(string key){return NormalizeChoice(key,new[]{"PageUp","PageDown","Insert","Delete","End","F7","F8","F9","F10"},"PageUp");}
+        public static string NormalizeMenuKey(string key){return OreMenuBinding.Normalize(key);}
         public static string NormalizeColor(string value,string fallback){string s=(value??"").Trim();if(s.Length==7&&s[0]=='#'){int x;if(int.TryParse(s.Substring(1),NumberStyles.HexNumber,CultureInfo.InvariantCulture,out x))return s.ToUpperInvariant();}return fallback;}
         public static string NormalizeChoice(string value,string[] choices,string fallback){for(int i=0;i<choices.Length;i++)if(string.Equals(value,choices[i],StringComparison.OrdinalIgnoreCase))return choices[i];return fallback;}
         private static bool TryDouble(string s,out double v){return double.TryParse(s,NumberStyles.Float,CultureInfo.InvariantCulture,out v)&&!double.IsNaN(v)&&!double.IsInfinity(v);}

@@ -7,6 +7,8 @@ using Sandbox.Graphics.GUI;
 using VRage.Game;
 using VRage.Utils;
 using VRageMath;
+using VRage.Input;
+using Sandbox.ModAPI;
 
 namespace ZeosOreHelper
 {
@@ -14,6 +16,7 @@ namespace ZeosOreHelper
     {
         private static OreNativeSettingsScreen screen;
         private static OreHudLayoutScreen editor;
+        public static bool EditingBinding {get{return screen!=null && screen.State!=MyGuiScreenState.CLOSED && screen.BindingActive;}}
         public static bool IsOpen { get { return (screen!=null && screen.State!=MyGuiScreenState.CLOSED) || (editor!=null && editor.State!=MyGuiScreenState.CLOSED); } }
         public static bool Toggle(Plugin host)
         {
@@ -51,6 +54,8 @@ namespace ZeosOreHelper
         internal const int RowsPerView=6;
         private readonly Plugin host;
         private readonly OreUiModel _model;
+        private OreMenuBinding _binding; private Action _pollBinding;
+        internal bool BindingActive {get{return _binding!=null && _binding.Editing;}}
         private readonly List<Func<bool>> _editors=new List<Func<bool>>();
         private static readonly int[] LastViews=new int[6];
         private static int LastPage;
@@ -73,6 +78,7 @@ namespace ZeosOreHelper
         public override bool Update(bool hasFocus)
         {
             bool result=base.Update(hasFocus);
+            if(hasFocus && State==MyGuiScreenState.OPENED && _pollBinding!=null)_pollBinding();
             if(++_ticks%30==0 && _summary!=null && host!=null) {_summary.Text=Short(Summary(),98);}
             if(_rebuild && !_building)
             {
@@ -89,6 +95,7 @@ namespace ZeosOreHelper
                 _colorScreen.CloseScreen(isUnloading); if(!isUnloading) return false;
             }
             if(!isUnloading && !CommitEditors()) return false;
+            _binding=null;_pollBinding=null;
             return base.CloseScreen(isUnloading);
         }
         private void BuildControls()
@@ -96,7 +103,7 @@ namespace ZeosOreHelper
             _building=true;
             try
             {
-                _model.Reload(); Controls.Clear(); _editors.Clear();_summary=null;
+                _model.Reload(); Controls.Clear(); _editors.Clear();_summary=null;_binding=null;_pollBinding=null;
                 AddCaption("ZEO ORE // PROSPECTOR",new Vector4(.82f,.91f,.94f,1),new Vector2(0,-.378f),.82f);
                 for(int i=0;i<OreUiCatalog.Pages.Length;i++) {
                     int target=i;
@@ -128,6 +135,7 @@ namespace ZeosOreHelper
                 }
                 _status=Label(-.354f,.309f,Short(_message,92),.46f);
                 Button(-.205f,.363f,.30f,.043f,"FULL / LEGACY SETTINGS",OpenExternal,.53f);
+                Button(.054f,.363f,.19f,.043f,"MENU KEY",delegate{if(!CommitEditors())return;_page=5;LastPage=5;LastGroups[5]=Option("MenuKey").Group;LastViews[5]=0;_rebuild=true;},.53f);
                 Button(.258f,.363f,.19f,.043f,"CLOSE",delegate{CloseScreen();},.62f);
             }
             finally { _building=false; }
@@ -187,7 +195,8 @@ namespace ZeosOreHelper
             var label=Label(-0.35364f,y-0.004f,Short(option.Label,38),0.62f);
             label.SetToolTip(option.Section+"\n"+option.Label+Help(option));
             Label(-0.35364f,y+0.015f,option.Section,0.40f);
-            if(option.Kind==OreOptionKind.Boolean)
+            if(option.Key=="MenuKey") {AddKeyBinding(option,y);}
+            else if(option.Kind==OreOptionKind.Boolean)
             {
                 bool value=Convert.ToBoolean(option.Read(_model.Current));
                 MyGuiControlButton on=null,off=null;
@@ -224,7 +233,7 @@ namespace ZeosOreHelper
             if(option.Key=="MinimumDistanceMeters")return "\nAsteroids disappear inside this radius. Use 0 to include nearby asteroids.";
             if(option.Kind==OreOptionKind.Number) return "\nRange: "+option.Min+" to "+option.Max+". Step: "+option.Step;
             if(option.Key=="StreamerMode") return "\nExternal HUD and legacy menu use capture exclusion. Native menus remain capturable; LCD output is suppressed.";
-            if(option.Key=="MenuKey") return "\nPageUp is Ore's default. Use a different binding from Core HOME and Nav INSERT/END.";
+            if(option.Key=="MenuKey") return "\nClick the key, press a new key, then APPLY. CLEAR disables it after APPLY. ESC/navigation cancels this draft. Pulsar Configure or /ore menu reopens a disabled menu binding.";
             return "";
         }
         private void AddEditor(OreOption option,float y)
@@ -296,6 +305,27 @@ namespace ZeosOreHelper
                 _rebuild=true;
             };
             Controls.Add(combo);
+        }
+        private void AddKeyBinding(OreOption option,float y)
+        {
+            var binding=new OreMenuBinding(_model.Current.Get("MenuKey","PageUp"));_binding=binding;
+            int armDelay=0;MyGuiControlButton capture=null;
+            Action refresh=()=>capture.Text=binding.Listening?"PRESS A KEY...":binding.Draft=="None"?"NONE / ASSIGN":binding.Draft;
+            capture=Button(.138f,y,.160f,.041f,"",delegate{binding.Begin();armDelay=2;FocusedControl=null;refresh();Message("Press a key, then APPLY. ESC cancels. Menu shortcuts pause while editing.");},.49f);
+            refresh();capture.SetToolTip("Click, press a key, then APPLY. Single keyboard key, like PDC's menu binding.");
+            Button(.258f,y,.065f,.041f,"CLEAR",delegate{binding.Clear();refresh();Message("APPLY disables the shortcut. Reopen with Pulsar Configure or /ore menu.");},.42f);
+            Button(.332f,y,.065f,.041f,"APPLY",delegate{
+                if(binding.Listening){Message("Press a key first, or CLEAR to disable the shortcut.");return;}
+                if(Apply(option,binding.Draft)){binding.Saved();refresh();Message("Menu key saved: "+binding.Draft);}
+            },.42f);
+            _pollBinding=delegate{
+                if(!binding.Listening||MyAPIGateway.Input==null)return;
+                if(armDelay>0){armDelay--;return;}
+                foreach(MyKeys key in Enum.GetValues(typeof(MyKeys))) {
+                    if(!OreMenuBinding.Capturable(key)||!MyAPIGateway.Input.IsNewKeyPressed(key))continue;
+                    if(binding.Capture(key)){refresh();Message("Selected "+binding.Draft+". Click APPLY to save.");break;}
+                }
+            };
         }
         private void OpenExternal()
         {

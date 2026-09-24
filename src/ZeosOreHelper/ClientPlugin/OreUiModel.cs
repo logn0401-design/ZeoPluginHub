@@ -39,6 +39,7 @@ namespace ZeosOreHelper {
    else {
     if(o.Kind==OreOptionKind.Number)value=(double)o.Parse(Convert.ToString(value,CultureInfo.InvariantCulture))*o.Multiplier;
     if(o.Kind==OreOptionKind.Color)value=o.Parse((string)value);
+    if(key=="MenuKey")value=OreMenuBinding.Validate(Convert.ToString(value,CultureInfo.InvariantCulture));
     Current.Set(key,value);
     if(o.Kind==OreOptionKind.Color) {if(o.Page=="THEME")Current.Set("ThemePreset","CUSTOM");if(o.Page=="LCD")Current.Set("LcdTheme","CUSTOM");}
     if(key.StartsWith("Ore") && key.Contains(":"))Current.Set("ActivePreset","Custom");
@@ -94,7 +95,7 @@ new OreOption { Page="HOME", Section="MASTER CONTROL", Label="Ore Helper enabled
 new OreOption { Page="HOME", Section="MASTER CONTROL", Label="Streamer Mode", Key="StreamerMode", Kind=OreOptionKind.Boolean },
 new OreOption { Page="HOME", Section="MASTER CONTROL", Label="Fail closed if capture exclusion fails", Key="StreamerFailClosed", Kind=OreOptionKind.Boolean },
 new OreOption { Page="HOME", Section="MASTER CONTROL", Label="Auto-launch ZeosOreOverlay", Key="AutoStartOverlay", Kind=OreOptionKind.Boolean },
-new OreOption { Page="HOME", Section="UI HOTKEY", Label="Ui Hotkey", Key="MenuKey", Kind=OreOptionKind.Choice, Choices=new[]{"PageUp","PageDown","Insert","Delete","End","F7","F8","F9","F10"} },
+new OreOption { Page="HOME", Section="KEYBINDS", Label="Menu key", Key="MenuKey", Kind=OreOptionKind.Choice, Choices=OreMenuBinding.Choices },
 new OreOption { Page="FILTERS", Section="DISTANCE", Label="MAX LOADED range", Key="MaxLoadedRange", Kind=OreOptionKind.Boolean },
 new OreOption { Page="FILTERS", Section="DISTANCE", Label="Minimum distance (km)", Key="MinimumDistanceMeters", Kind=OreOptionKind.Number, Min=0.0, Max=1000.0, Step=0.5, Decimals=1, Multiplier=1000 },
 new OreOption { Page="FILTERS", Section="DISTANCE", Label="Maximum distance (km)", Key="SurveyRangeMeters", Kind=OreOptionKind.Number, Min=1.0, Max=1000.0, Step=1.0, Decimals=1, Multiplier=1000 },

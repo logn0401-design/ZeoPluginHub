@@ -159,7 +159,9 @@ namespace ZeosOreOverlay
             AddCheck("Auto-launch ZeosOreOverlay", _s.B("AutoStartOverlay", true), v => SetSave("AutoStartOverlay", v, false));
 
             AddSection("UI HOTKEY");
-            AddCombo(MenuKeys, IndexOf(MenuKeys, _s.Get("MenuKey", "PageUp")), i => SetSave("MenuKey", MenuKeys[i], false));
+            var currentKey=_s.Get("MenuKey","PageUp");
+            var menuKeys=MenuKeys.Concat(new[]{"None",currentKey}).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            AddCombo(menuKeys, IndexOf(menuKeys,currentKey), i => SetSave("MenuKey",menuKeys[i],false));
 
             AddSection("CURRENT STATE");
             AddStatus("ORE HELPER: " + (_s.B("Enabled") ? "ACTIVE" : "OFF"), _s.B("Enabled"));

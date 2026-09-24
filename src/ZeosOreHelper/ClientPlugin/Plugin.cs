@@ -16,7 +16,7 @@ namespace ZeosOreHelper
     public sealed class Plugin : IPlugin
     {
         public const string Name="Zeos Ore Helper";
-        public const string Version="1.0.2-HUD-CONSISTENCY";
+        public const string Version="1.0.3-NATIVE-KEYBIND";
         internal static string CatalogOverlayPath {get;private set;}
         public void LoadAssets(IReadOnlyDictionary<string,string> assets) {
             string directory;
@@ -161,16 +161,16 @@ namespace ZeosOreHelper
         {
             try
             {
-                if(MyAPIGateway.Input==null||!GameWindowState.Capture().Focused)return;
+                if(OreNativeUi.EditingBinding||MyAPIGateway.Input==null||!GameWindowState.Capture().Focused)return;
                 if(!OreNativeUi.IsOpen && (MyAPIGateway.Gui.ChatEntryVisible || MyAPIGateway.Gui.IsCursorVisible))return;MyKeys key=MenuKeyToMyKeys(_settings.MenuKey);
-                if(MyAPIGateway.Input.IsNewKeyPressed(key)){if(!OreNativeUi.Toggle(this))OpenLegacyMenu();}
+                if(key!=MyKeys.None&&MyAPIGateway.Input.IsNewKeyPressed(key)){if(!OreNativeUi.Toggle(this))OpenLegacyMenu();}
             }
             catch{}
         }
 
         private static MyKeys MenuKeyToMyKeys(string key)
         {
-            string k=HudSettings.NormalizeMenuKey(key);if(k=="PageDown")return MyKeys.PageDown;if(k=="Insert")return MyKeys.Insert;if(k=="Delete")return MyKeys.Delete;if(k=="End")return MyKeys.End;if(k=="F7")return MyKeys.F7;if(k=="F8")return MyKeys.F8;if(k=="F9")return MyKeys.F9;if(k=="F10")return MyKeys.F10;return MyKeys.PageUp;
+            return OreMenuBinding.ToKey(key);
         }
 
         private void OnSettingsReloaded()
