@@ -4,12 +4,12 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Ore Helper</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.3 — Native click-to-bind menu key, resizable HUD and ore guidance.</Tooltip>
-  <Description>Learned ore search, configurable pings, optional SDX2 estimates and approximate nearby deposits. MENU KEY in the native footer supports click, key press, CLEAR and APPLY without opening legacy settings. Preserves 1.0.2 HUD resizing and automatic overlay shutdown. Search starts off each launch. Windows / Pulsar Legacy.</Description>
+  <Tooltip>1.0.4 - Simpler search menu, clearer settings, native key binding and resizable HUD.</Tooltip>
+  <Description>Learned ore search, configurable pings, optional SDX2 estimates and approximate nearby deposits. Common search controls have one home. Clearer categories and tooltips, ANY / ALL ore matching, one MOVE / RESIZE HUD button and native MENU KEY binding. Search starts off each launch. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>f54c0a34050f53a3c81f5549e660426ce130c13f</Commit>
+  <Commit>c2e2c1dabd82fe34ef36c2bbeb55d2c4ef08ad0a</Commit>
   <SourceDirectories><Directory>loader/ZeosOreHelper/</Directory></SourceDirectories>
-  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/1.0.3/ZeosOreHelper.Runtime.dll" Sha256="050331b5c349d5c06a22670436e97e715f9a5774b68a9ef3534ea17b1c02e979" Reference="true" />
-  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/1.0.3/ZeosOreOverlay.zip" Sha256="32c8adc5eaa8eb728d74c1e685c5b1b7e1b18e3b55f65db346119919bbf6e165" Extract="true" />
+  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/1.0.4/ZeosOreHelper.Runtime.dll" Sha256="bd72eecffadd4badef8c5321f95bf8e2dd0c29020514bccbabd2e4b907994ea7" Reference="true" />
+  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/1.0.4/ZeosOreOverlay.zip" Sha256="5c1d4ce4b90d00e2f2425a90ba098dfabf41ab1b5a5c5439fae6f91196357df2" Extract="true" />
 </PluginData>
