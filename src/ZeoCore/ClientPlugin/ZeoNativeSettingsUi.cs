@@ -28,7 +28,7 @@ namespace ZeoCore
                 screen.Closed += delegate { if (ReferenceEquals(_screen, screen)) _screen=null; };
                 _screen=screen;
                 MyGuiSandbox.AddScreen(screen);
-                Plugin.Log("Native SE full settings screen opened: 11 pages / 148 page controls plus drag layout editor.");
+                Plugin.Log("Native SE full settings screen opened: catalog pages with drag layout editor.");
                 return true;
             }
             catch (Exception ex)
@@ -62,13 +62,14 @@ namespace ZeoCore
         private readonly Action _openExternal;
         private readonly Action _changed,_ensureOverlay;
         private readonly List<Func<bool>> _editors=new List<Func<bool>>();
-        private static readonly int[] LastViews=new int[11];
+        private static readonly int[] LastViews=new int[ZeoNativeCatalog.Pages.Length];
         private static int LastPage=-1;
         private int _page;
         private bool _building, _rebuild, _committing;
         private string _message="Changes apply immediately. Type a value, then press ENTER or APPLY.";
         private MyGuiControlLabel _status;
         private MyGuiControlLabel _refillStatus;
+        private readonly List<Action> _bindingPolls=new List<Action>();
         private ZeoNativeColorScreen _colorScreen;
 
         internal ZeoNativeSettingsScreen(HudSettings settings, Action openExternal, Action changed, Action ensureOverlay)
@@ -76,7 +77,7 @@ namespace ZeoCore
         {
             _model=new ZeoNativeSettingsModel(HudSettings.PathName,changed);
             _openExternal=openExternal; _changed=changed; _ensureOverlay=ensureOverlay;
-            _page=Math.Max(0,Math.Min(10,LastPage < 0 ? (int)settings.MenuPage : LastPage));
+            _page=Math.Max(0,Math.Min(ZeoNativeCatalog.Pages.Length-1,LastPage < 0 ? (int)settings.MenuPage : LastPage));
             DrawMouseCursor=true; CloseButtonEnabled=true; EnabledBackgroundFade=true;
             CanHideOthers=false; CanBeHidden=false;
             BuildControls();
@@ -86,6 +87,7 @@ namespace ZeoCore
         {
             bool result=base.Update(hasFocus);
             if (_rebuild && !_building) { _rebuild=false; BuildControls(); }
+            if(hasFocus)foreach(var poll in _bindingPolls)poll();
             if(_refillStatus!=null)
                 _refillStatus.Text=Short((Plugin.RefillActive ? "REFILLING: " : "")+Plugin.RefillStatus,108);
             return result;
@@ -112,7 +114,7 @@ namespace ZeoCore
             _building=true;
             try
             {
-                Controls.Clear(); _editors.Clear(); _model.Reload(); _refillStatus=null;
+                Controls.Clear(); _editors.Clear(); _bindingPolls.Clear(); _model.Reload(); _refillStatus=null;
                 AddCaption("ZEOCORE // TACTICAL SYSTEMS",new Vector4(0.82f,0.91f,0.94f,1f),new Vector2(0f,-0.417f),0.88f);
                 for (int i=0;i<ZeoNativeCatalog.Pages.Length;i++)
                 {
@@ -141,13 +143,13 @@ namespace ZeoCore
                         if(!CommitEditors()) return;
                         if(CloseScreen()) ZeoNativeSettingsUi.BeginLayout(_changed,_ensureOverlay);
                     },0.62f);
-                if(ZeoNativeCatalog.Pages[_page]=="AMMO")
+                if(ZeoNativeCatalog.Pages[_page]=="REFILL")
                     Button(0,0.327f,0.390f,0.043f,"QUICK REFILL / CANCEL",delegate {
                         if(!CommitEditors())return;
                         Plugin.ToggleRefill();
                     },0.62f);
                 var hint=Label(-0.421f,0.365f,HintForPage(),0.53f);
-                if(ZeoNativeCatalog.Pages[_page]=="AMMO")_refillStatus=hint;
+                if(ZeoNativeCatalog.Pages[_page]=="REFILL")_refillStatus=hint;
                 _status=Label(-0.421f,0.387f,Short(_message,108),0.50f);
                 Button(-0.285f,0.425f,0.280f,0.044f,"FULL / LEGACY SETTINGS",OpenExternal,0.61f);
                 Button(0.335f,0.425f,0.170f,0.044f,"CLOSE",delegate { CloseScreen(); },0.65f);
@@ -162,7 +164,8 @@ namespace ZeoCore
             if(page=="THEME") return "PICK opens native RGB controls. Menu colors style the legacy window; this menu keeps SE styling.";
             if(page=="LAYOUT") return "Drag edges to resize: width adjusts columns; height adjusts rows and text. Font preferences are preserved.";
             if(page=="SCOPE") return "Spectrum / Auto follows the native signal. Motion prediction controls other sensor tracks.";
-            if(page=="AMMO") return "Dock to refill tanks and ammo WANT deficits. Relevant-only applies; ammo needs connected ship cargo.";
+            if(page=="REFILL") return "WANT > 0 keeps that ammo type. Unload: cargo only; [ZEO KEEP] containers are protected. Zero WANT unloads that type.";
+            if(page=="AMMO") return "Ammo HUD display options. Set loading targets and start docked service on REFILL.";
             return "Hover a setting for details. ESC or the configured menu key returns to the game.";
         }
         private void Navigate(int delta)
@@ -192,7 +195,26 @@ namespace ZeoCore
             var label=Label(-0.421f,y-0.004f,Short(option.Label,53),0.62f);
             label.SetToolTip(option.Section+"\n"+option.Label+Help(option));
             Label(-0.421f,y+0.015f,option.Section,0.40f);
-            if(option.Kind==NativeOptionKind.Boolean)
+            if(option.Key=="QuickRefillKey")
+            {
+                int key=_model.Current.QuickRefillKey,mod=_model.Current.QuickRefillModifier;bool listening=false;
+                MyGuiControlButton capture=null;
+                Action refresh=()=>capture.Text=listening?"PRESS KEY...":(key==0?"UNBOUND":(mod==0?"":ZeoOverlay.QuickRefillBinding.Modifiers[mod]+" + ")+ZeoOverlay.QuickRefillBinding.Labels[ZeoOverlay.QuickRefillBinding.Index(key)]);
+                capture=Button(.190f,y,.200f,.041f,"",()=>{listening=true;refresh();Message("Press a key combination, then APPLY. ESC / leaving this page discards the draft.");},.48f);
+                refresh();
+                Button(.325f,y,.063f,.041f,"CLEAR",()=>{key=0;mod=0;listening=false;refresh();},.43f);
+                Button(.395f,y,.063f,.041f,"APPLY",()=>{try{_model.SaveRefillBinding(key,mod);listening=false;refresh();Message("Refill binding saved.");_rebuild=true;}catch(Exception ex){Message(ex.Message);}},.43f);
+                _bindingPolls.Add(()=>{
+                    var input=Sandbox.ModAPI.MyAPIGateway.Input;if(!listening||input==null)return;
+                    foreach(int candidate in ZeoOverlay.QuickRefillBinding.Keys){
+                        if(candidate==0||!input.IsNewKeyPressed((VRage.Input.MyKeys)candidate))continue;
+                        key=candidate;bool ctrl=input.IsAnyCtrlKeyPressed(),alt=input.IsAnyAltKeyPressed(),shift=input.IsAnyShiftKeyPressed();
+                        for(int i=0;i<ZeoOverlay.QuickRefillBinding.Modifiers.Length;i++)if(ZeoOverlay.QuickRefillBinding.MatchModifiers(i,ctrl,alt,shift)){mod=i;break;}
+                        listening=false;refresh();Message("Binding selected. APPLY saves it.");break;
+                    }
+                });
+            }
+            else if(option.Kind==NativeOptionKind.Boolean)
             {
                 bool value=Convert.ToBoolean(option.Read(_model.Current));
                 MyGuiControlButton on=null,off=null;

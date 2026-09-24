@@ -40,6 +40,10 @@ namespace ZeoCore
         public bool ShowShipSpeed { get; set; } = true;
         public int FusionReserveTarget { get; set; } = 2000;
         public bool ShowAmmoPanel { get; set; } = true;
+        public bool RefillFuel { get; set; } = true;
+        public bool RefillAmmo { get; set; } = true;
+        public bool RefillTanks { get; set; } = true;
+        public bool RefillUnloadOtherCargo { get; set; } = false;
         public int QuickRefillKey { get; set; }
         public int QuickRefillModifier { get; set; } = 1;
         // ZEOCORE_V067H4_AMMO_TYPE_VISIBILITY

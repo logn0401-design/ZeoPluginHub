@@ -31,6 +31,7 @@ namespace ZeoCore
         private readonly List<MyInventoryItem> _shipStatusItems = new List<MyInventoryItem>(256);
         private readonly Dictionary<string,double> _shipAmmoCounts = new Dictionary<string,double>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string,string> _shipAmmoLiveNames = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string,List<long>> _shipAmmoWeapons=new Dictionary<string,List<long>>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _shipRelevantAmmo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<GasTankRef> _shipGasTanks = new List<GasTankRef>(64);
         private readonly Dictionary<string, GasKind> _gasKindByDefinition = new Dictionary<string, GasKind>(StringComparer.OrdinalIgnoreCase);
@@ -429,7 +430,7 @@ namespace ZeoCore
                     var e=AmmoCatalog.Entries[ai]; double have; _shipAmmoCounts.TryGetValue(e.Subtype,out have);
                     string liveName; if (!_shipAmmoLiveNames.TryGetValue(e.Subtype, out liveName) || string.IsNullOrWhiteSpace(liveName)) liveName=e.ServerName;
                     bool relevant=_shipRelevantAmmo.Contains(e.Subtype) || have > 0.0001;
-                    next.Ammo.Add(new HudAmmoStock { Key=e.Key, CleanName=e.CleanName, ServerName=liveName, Subtype=e.Subtype, Have=have, Relevant=relevant });
+                    next.Ammo.Add(new HudAmmoStock { Key=e.Key, CleanName=e.CleanName, ServerName=liveName, Subtype=e.Subtype, Have=have, Relevant=relevant, WeaponCompatible=_shipRelevantAmmo.Contains(e.Subtype), WeaponIds=_shipAmmoWeapons.ContainsKey(e.Subtype)?_shipAmmoWeapons[e.Subtype].Distinct().ToArray():new long[0] });
                 }
 
                 var gridEntity = grid as MyEntity;
@@ -670,7 +671,7 @@ namespace ZeoCore
                 _shipGasTanks.Clear();
             }
             _shipFusion = 0; _shipDrive = -1; _shipReactor = -1;
-            _shipAmmoCounts.Clear(); _shipAmmoLiveNames.Clear(); _shipRelevantAmmo.Clear();
+            _shipAmmoCounts.Clear(); _shipAmmoLiveNames.Clear(); _shipRelevantAmmo.Clear(); _shipAmmoWeapons.Clear();
             _shipPowerCurrent = 0; _shipPowerMax = 0; _shipHp = -1;
 
             double hpCur = 0, hpMax = 0;
@@ -718,19 +719,21 @@ namespace ZeoCore
                     try
                     {
                         var entity = fat as MyEntity;
-                        if (entity != null && fat is IMyUserControllableGun && _wc.Ready && _wc.HasCoreWeapon(entity))
+                        if (entity != null && _wc.Ready && _wc.HasCoreWeapon(entity))
                         {
-                            int empty=0;
-                            for (int wid=0; wid<16 && empty<3; wid++)
+                            var parts=new Dictionary<string,int>();
+                            _wc.WeaponParts(entity,parts);
+                            var weaponIds=parts.Count>0 ? parts.Values.Distinct().ToArray() : Enumerable.Range(0,16).ToArray();
+                            foreach (int wid in weaponIds)
                             {
                                 var map=_wc.GetMagazineMap(entity,wid);
-                                string sub=map.Item1.SubtypeName;
-                                if (string.IsNullOrWhiteSpace(sub)) { empty++; continue; }
-                                empty=0;
-                                var known=AmmoCatalog.FindSubtype(sub);
+                                var known=AmmoCatalog.FindSubtype(map.Item1.SubtypeName) ?? AmmoCatalog.FindSubtype(map.Item2);
+                                if(known==null)continue;
                                 if (known!=null)
                                 {
                                     _shipRelevantAmmo.Add(known.Subtype);
+                                    List<long> owners;if(!_shipAmmoWeapons.TryGetValue(known.Subtype,out owners))_shipAmmoWeapons[known.Subtype]=owners=new List<long>();
+                                    owners.Add(fat.EntityId);
                                     // Prefer CoreSystems' live magazine display name when available.
                                     // This keeps the SERVER name mode aligned with the SDX2 server rather
                                     // than ever exposing the inventory subtype/pull id.
