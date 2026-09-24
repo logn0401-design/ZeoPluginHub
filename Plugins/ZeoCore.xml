@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Core</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.4 — Resizable tactical HUD and configurable Quick Refill shortcut. Overlay shutdown fix.</Tooltip>
-  <Description>Zeo Core 1.0.4 adds a configurable Quick Refill key and modifier in HOME &gt; AMMO. Press once to refill docked ship ammo to WANT targets and fill working tanks; press again to cancel. Unbound by default. Includes independent HUD width/height resizing with fitted text, tactical markers, scope, ship and ammo status, fleet roster, Battle Manager sharing, and hidden distress GPS across received sectors. Windows / Pulsar Legacy. The overlay now closes with its owning game or after its game window is destroyed, including crash recovery and plugin unload.</Description>
+  <Tooltip>1.0.5 — Live weapon telemetry for War Room and faction replay. Tactical HUD, Quick Refill and distress GPS.</Tooltip>
+  <Description>Zeo Core 1.0.5 adds observed WeaponCore firing and projectile telemetry to the shared War Room and faction recordings. Captures the controlled ship and mechanical subgrids while telemetry sharing is enabled. Includes independent HUD resizing, Quick Refill and its keybind, tactical markers, fleet sharing, hidden distress GPS, and overlay shutdown recovery. Windows / Pulsar Legacy.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>a6d958711b6b02da6a247049e063e7e406e4d0fa</Commit>
+  <Commit>2e70f263c2fff262b0ea84d12050c70a6e71135e</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoCore/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.4/ZeoCore.Runtime.dll" Sha256="eadb9a8311978c3495ae4899fc90700b718d38c8beca905898085e29c72e4de4" Reference="true" />
-  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.4/ZeoOverlay.zip" Sha256="5cebdd1db2f51f0bb369e3686007a4ac27a7509f2101a129aebbf2f330d4fb06" Extract="true" />
+  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.5/ZeoCore.Runtime.dll" Sha256="2b61001d7531528feca81087cc518a94a10e45f93257dc4b8c0c8a54ce669068" Reference="true" />
+  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.5/ZeoOverlay.zip" Sha256="5b0d853ade1a62c6f3cef4da2e69601c6f78b57c8eefebe855b9116b4855e8de" Extract="true" />
 </PluginData>
