@@ -112,7 +112,8 @@ namespace ZeosOreOverlay
             var state=g.Save();try {
             if(f.Layout!=null)g.ExcludeClip(Rectangle.Round(new RectangleF(f.Layout.ToolbarX,f.Layout.ToolbarY,f.Layout.ToolbarW,f.Layout.ToolbarH)));
             if(f.HelperEnabled&&_s.B("ListEnabled",true)&&!string.Equals(_s.Get("HudLayout"),"Minimal",StringComparison.OrdinalIgnoreCase))DrawList(g,w,h,f);
-            if(f.Layout!=null){var b=OreGeometry.Bounds(_s,w,h,Math.Min(Math.Max(1,Math.Min(20,_s.I("ListRows",8))),f.Roids.Count(r=>r!=null&&r.ListEligible)),f.Layout);using(var pen=new Pen(Color.FromArgb(220,140,225,245),2)){pen.DashStyle=DashStyle.Dash;g.DrawRectangle(pen,(float)b.X,(float)b.Y,(float)b.Width,(float)b.Height);}}
+            if(f.Layout!=null){var b=OreGeometry.Bounds(_s,w,h,Math.Min(Math.Max(1,Math.Min(20,_s.I("ListRows",8))),f.Roids.Count(r=>r!=null&&r.ListEligible)),f.Layout);using(var pen=new Pen(Color.FromArgb(220,140,225,245),2)){pen.DashStyle=DashStyle.Dash;g.DrawRectangle(pen,(float)b.X,(float)b.Y,(float)b.Width,(float)b.Height);
+            using(var grip=new SolidBrush(Color.FromArgb(230,140,225,245)))foreach(var point in new[]{new PointF((float)b.X,(float)b.Y),new PointF((float)(b.X+b.Width),(float)b.Y),new PointF((float)b.X,(float)(b.Y+b.Height)),new PointF((float)(b.X+b.Width),(float)(b.Y+b.Height)),new PointF((float)(b.X+b.Width/2),(float)b.Y),new PointF((float)(b.X+b.Width/2),(float)(b.Y+b.Height)),new PointF((float)b.X,(float)(b.Y+b.Height/2)),new PointF((float)(b.X+b.Width),(float)(b.Y+b.Height/2))})g.FillRectangle(grip,point.X-3,point.Y-3,6,6);}}
             }finally{g.Restore(state);}
         }
 
@@ -221,15 +222,18 @@ namespace ZeosOreOverlay
             float scale=(float)OreGeometry.Safe(_s.D("PanelScale",1),0.5,2,1),width=baseW*scale*(float)OreGeometry.Safe(_s.D("PanelWidthScale",1),0.65,2.5,1);float textScale=(float)OreGeometry.Safe(_s.D("TextScale",1),0.5,2,1),rowH=24f*(float)OreGeometry.Safe(_s.D("RowScale",1),0.65,1.75,1)*textScale;float headerH=_s.B("ShowHeader",true)?50f*scale:10f;float colsH=_s.B("ShowColumnHeader",true)?24f*scale:0;float statusH=_s.B("ShowStatusBar",true)?25f*scale:0;float height=headerH+colsH+rows.Count*rowH+statusH+14f;
             var bounds=OreGeometry.Bounds(_s,w,h,rows.Count,f.Layout);var rect=new RectangleF((float)bounds.X,(float)bounds.Y,(float)bounds.Width,(float)bounds.Height);
             var listClip=g.Save();g.SetClip(rect,CombineMode.Intersect);try {
+            float textFit=rect.Height/height;
+            using(var transform=new Matrix(textFit,0,0,textFit,rect.X*(1-textFit),rect.Y*(1-textFit)))g.MultiplyTransform(transform);
+            rect=new RectangleF(rect.X,rect.Y,rect.Width/textFit,height);
             Color panel=C(_s.Get("HudPanelColor","#120D0E"),Color.FromArgb(18,13,14)),border=C(_s.Get("HudBorderColor","#5A2024"),Color.DarkRed),accent=C(_s.Get("HudAccentColor","#D83B3B"),Color.Red),text=C(_s.Get("HudTextColor","#E8EAED"),Color.White),dim=C(_s.Get("HudDimColor","#8C9299"),Color.Gray);
             DrawFrame(g,rect,panel,border,accent,_s.Get("FrameStyle","Hex Command"));float y=rect.Top+8;
             if(_s.B("ShowHeader",true))
             {
                 using(var f1=new Font("Bahnschrift SemiCondensed",Math.Max(10,16*textScale),FontStyle.Bold,GraphicsUnit.Pixel))using(var f2=new Font("Consolas",Math.Max(8,10*textScale),FontStyle.Regular,GraphicsUnit.Pixel))using(var tb=new SolidBrush(Color.FromArgb(Math.Max(0,Math.Min(255,_s.I("TextOpacity",245))),text)))using(var db=new SolidBrush(Color.FromArgb(220,dim)))
-                {g.DrawString("ZEO // PROSPECTOR",f1,tb,rect.Left+18,y+3);g.DrawString((_s.Get("ActivePreset","Balanced")+"  //  "+_s.Get("SearchSort","Most estimated ore").ToUpperInvariant()).ToUpperInvariant(),f2,db,rect.Left+18,y+25);var best=rows.FirstOrDefault();string br=best==null?"BEST --":"BEST "+best.Number.ToString("00")+" / "+(best.MustHit?"S!":best.Grade);var sz=g.MeasureString(br,f1);using(var bestBrush=new SolidBrush(best==null?dim:C(best.GradeColor,text)))g.DrawString(br,f1,bestBrush,rect.Right-sz.Width-18,y+3);}
+                {DrawCell(g,"ZEO // PROSPECTOR",f1,tb,new RectangleF(rect.Left+18,y+3,(rect.Width-36)*.66f,f1.Height));DrawCell(g,(_s.Get("ActivePreset","Balanced")+"  //  "+_s.Get("SearchSort","Most estimated ore")).ToUpperInvariant(),f2,db,new RectangleF(rect.Left+18,y+25,rect.Width-36,f2.Height));var best=rows.FirstOrDefault();string br=best==null?"BEST --":"BEST "+best.Number.ToString("00")+" / "+(best.MustHit?"S!":best.Grade);var sz=g.MeasureString(br,f1);using(var bestBrush=new SolidBrush(best==null?dim:C(best.GradeColor,text)))DrawCell(g,br,f1,bestBrush,new RectangleF(rect.Left+18+(rect.Width-36)*.68f,y+3,(rect.Width-36)*.32f,f1.Height));}
                 y+=headerH;
             }
-            var cols=BuildColumns();float inner=rect.Width-32,total=cols.Sum(c=>c.W);float fit=total>inner?inner/total:1f;using(var font=new Font("Consolas",Math.Max(8,11*textScale),FontStyle.Regular,GraphicsUnit.Pixel))using(var headFont=new Font("Bahnschrift SemiCondensed",Math.Max(8,9.5f*textScale),FontStyle.Bold,GraphicsUnit.Pixel))
+            var cols=BuildColumns();float inner=rect.Width-32,total=cols.Sum(c=>c.W);float fit=total>0?Math.Max(1,inner)/total:1f;using(var font=new Font("Consolas",Math.Max(8,11*textScale),FontStyle.Regular,GraphicsUnit.Pixel))using(var headFont=new Font("Bahnschrift SemiCondensed",Math.Max(8,9.5f*textScale),FontStyle.Bold,GraphicsUnit.Pixel))
             {
                 if(_s.B("ShowColumnHeader",true)){float x=rect.Left+16;using(var db=new SolidBrush(Color.FromArgb(210,dim)))foreach(var c in cols){DrawCell(g,c.Label,headFont,db,new RectangleF(x,y+3,Math.Max(1,c.W*fit-3),colsH));x+=c.W*fit;}using(var p=new Pen(Color.FromArgb(110,border),1))g.DrawLine(p,rect.Left+14,y+colsH-2,rect.Right-14,y+colsH-2);y+=colsH;}
                 for(int i=0;i<rows.Count;i++)
@@ -237,7 +241,7 @@ namespace ZeosOreOverlay
                     var r=rows[i];var rr=new RectangleF(rect.Left+10,y+i*rowH,rect.Width-20,rowH);if(r.Selected||r.Pinned){using(var b=new SolidBrush(Color.FromArgb(r.Selected?45:25,r.Selected?C(_s.Get("SelectedColor","#FFE16B"),Color.Gold):accent)))g.FillRectangle(b,rr);}float x=rect.Left+16;Color rc=C(r.GradeColor,text);using(var rb=new SolidBrush(Color.FromArgb(Math.Max(0,Math.Min(255,_s.I("TextOpacity",245))),rc)))foreach(var c in cols){DrawCell(g,ColumnValue(c.Key,r),font,rb,new RectangleF(x,rr.Top+4,Math.Max(1,c.W*fit-3),rowH-4));x+=c.W*fit;}
                 }
             }
-            y+=rows.Count*rowH;if(_s.B("ShowStatusBar",true)){using(var p=new Pen(Color.FromArgb(100,border),1))g.DrawLine(p,rect.Left+14,y+2,rect.Right-14,y+2);using(var f3=new Font("Consolas",Math.Max(8,9.5f*textScale),FontStyle.Regular,GraphicsUnit.Pixel))using(var db=new SolidBrush(Color.FromArgb(215,dim))){string s=string.IsNullOrEmpty(f.SearchMessage)?"VISIBLE "+f.VisibleCount+"  READ "+f.ReadyCount+"  PENDING "+f.PendingCount:f.SearchMessage;g.DrawString(s,f3,db,rect.Left+16,y+7);}}
+            y+=rows.Count*rowH;if(_s.B("ShowStatusBar",true)){using(var p=new Pen(Color.FromArgb(100,border),1))g.DrawLine(p,rect.Left+14,y+2,rect.Right-14,y+2);using(var f3=new Font("Consolas",Math.Max(8,9.5f*textScale),FontStyle.Regular,GraphicsUnit.Pixel))using(var db=new SolidBrush(Color.FromArgb(215,dim))){string s=string.IsNullOrEmpty(f.SearchMessage)?"VISIBLE "+f.VisibleCount+"  READ "+f.ReadyCount+"  PENDING "+f.PendingCount:f.SearchMessage;DrawCell(g,s,f3,db,new RectangleF(rect.Left+16,y+7,rect.Width-32,f3.Height));}}
             }finally{g.Restore(listClip);}
         }
         private sealed class Col{public string Key,Label;public float W;public Col(string k,string l,float w){Key=k;Label=l;W=w;}}
@@ -349,7 +353,14 @@ namespace ZeosOreOverlay
         }
 
         private static string Amount(double volume){return volume>=1000000000?(volume/1000000000).ToString("0.#")+"B":volume>=1000000?(volume/1000000).ToString("0.#")+"M":volume>=1000?(volume/1000).ToString("0.#")+"k":volume.ToString("0");}
-        private static void DrawCell(Graphics g,string text,Font font,Brush brush,RectangleF rect){using(var format=new StringFormat{FormatFlags=StringFormatFlags.NoWrap,Trimming=StringTrimming.EllipsisCharacter})g.DrawString(text??"",font,brush,rect,format);}
+        private static void DrawCell(Graphics g,string text,Font font,Brush brush,RectangleF rect){
+            if(rect.Width<=0||rect.Height<=0)return;
+            using(var format=new StringFormat(StringFormat.GenericTypographic){FormatFlags=StringFormatFlags.NoWrap,Trimming=StringTrimming.EllipsisCharacter}){
+                var measured=g.MeasureString(text??"",font,int.MaxValue,format);
+                float fit=Math.Min(1,Math.Min(Math.Max(.8f,rect.Width/Math.Max(1,measured.Width)),rect.Height/Math.Max(1,measured.Height)));
+                using(var fitted=new Font(font.FontFamily,font.Size*fit,font.Style,GraphicsUnit.Pixel))g.DrawString(text??"",fitted,brush,rect,format);
+            }
+        }
         private static Color C(string hex,Color d){try{if(!string.IsNullOrWhiteSpace(hex)&&hex.Length==7&&hex[0]=='#'){int v=Convert.ToInt32(hex.Substring(1),16);return Color.FromArgb((v>>16)&255,(v>>8)&255,v&255);}}catch{}return d;}
         private static string Range(double m){if(m>=10000)return(m/1000.0).ToString("0")+"k";if(m>=1000)return(m/1000.0).ToString("0.0")+"k";return m.ToString("0")+"m";}
         private static string FormatSize(double m){if(m<=0)return"--";if(m>=1000)return(m/1000.0).ToString("0.0")+"k";return m.ToString("0")+"m";}

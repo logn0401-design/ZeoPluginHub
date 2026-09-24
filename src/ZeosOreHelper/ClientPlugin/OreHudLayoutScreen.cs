@@ -23,15 +23,16 @@ namespace ZeosOreHelper
         private readonly OreLayoutModel model;
         private readonly MyGuiControlLabel status;
         private bool down=true,dragging,placeSelected;
-        private double offsetX,offsetY,startX,startY;
+        private double offsetX,offsetY,startX,startY,startW,startH;
+        private OreBounds resizeStart; private int edges;
         internal OreHudLayoutScreen(Plugin host)
             : base(new Vector2(.5f,.5f),new Vector4(0,0,0,0),new Vector2(1,1),true)
         {
             this.host=host; model=new OreLayoutModel(new OreOverlaySettings(HudSettings.SettingsPath)); host.Layout=model.Draft; 
             DrawMouseCursor=true; CloseButtonEnabled=false; EnabledBackgroundFade=false;
             CanHideOthers=false; CanBeHidden=false;
-            Label(-.354f,-.460f,"ZEO ORE // EDIT LIST POSITION",.75f);
-            Label(-.354f,-.429f,"Drag the outlined panel. PLACE PANEL lets you drag it from anywhere below.",.50f);
+            Label(-.354f,-.460f,"ZEO ORE // EDIT LIST LAYOUT",.75f);
+            Label(-.354f,-.429f,"Drag inside to move; drag edges or corners to resize. Text follows panel height.",.50f);
             Button(-.285f,-.387f,.14f,"PLACE PANEL",delegate { placeSelected=true; dragging=false; });
             Button(-.132f,-.387f,.14f,"UNDO",delegate { model.Undo(); dragging=false; });
             Button(.174f,-.387f,.14f,"SAVE",Save);
@@ -62,19 +63,23 @@ namespace ZeosOreHelper
             double x=cursor.X-snapshot.Left,y=cursor.Y-snapshot.Top;
             if(pressed && !down && !model.Draft.ToolbarContains(x,y) && x>=0 && y>=0 && x<snapshot.Width && y<snapshot.Height)
             {
-                dragging=placeSelected || bounds.Contains(x,y);
+                edges=placeSelected?0:bounds.Edges(x,y);
+                dragging=placeSelected || bounds.Contains(x,y) || edges!=0;
                 if(dragging)
                 {
                     offsetX=placeSelected ? bounds.Width/2 : x-bounds.X;
                     offsetY=placeSelected ? bounds.Height/2 : y-bounds.Y;
-                    startX=x; startY=y; placeSelected=false;
+                    startX=x; startY=y; resizeStart=bounds; startW=model.Draft.WidthScale; startH=model.Draft.HeightScale; placeSelected=false;
                 }
             }
             if(pressed && dragging && (Math.Abs(x-startX)>2 || Math.Abs(y-startY)>2))
-                model.Move(x-offsetX,y-offsetY,bounds.Width,bounds.Height,snapshot.Width,snapshot.Height);
+            {
+                if(edges!=0)model.Resize(resizeStart,edges,x-startX,y-startY,startW,startH,snapshot.Width,snapshot.Height);
+                else model.Move(x-offsetX,y-offsetY,resizeStart.Width,resizeStart.Height,snapshot.Width,snapshot.Height);
+            }
             if(!pressed) dragging=false;
             down=pressed;
-            status.Text=placeSelected ? "Drag below this toolbar to place the ranking panel." : "SAVE commits moved coordinates. UNDO restores the starting position. ESC cancels.";
+            status.Text=placeSelected ? "Drag below this toolbar to place the ranking panel." : "SAVE commits layout. UNDO restores starting size and position. ESC cancels.";
             return result;
         }
         private void Save()

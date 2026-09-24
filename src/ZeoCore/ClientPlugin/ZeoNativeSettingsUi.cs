@@ -160,8 +160,8 @@ namespace ZeoCore
             if(page=="FLEET") return "NETWORK / SHARING: local sensors stay active; shared data depends on the server.";
             if(page=="CAPTURE" || page=="PRIVACY") return "Capture exclusion covers the external HUD and legacy menu. This native menu is visible in capture.";
             if(page=="THEME") return "PICK opens native RGB controls. Menu colors style the legacy window; this menu keeps SE styling.";
-            if(page=="LAYOUT") return "EDIT HUD LAYOUT opens move and width / height resize. NEXT opens numeric sizes, positions and marker limits.";
-            if(page=="SCOPE") return "Prediction and visual smoothing are separate. Existing tracking behavior is preserved.";
+            if(page=="LAYOUT") return "Drag edges to resize: width adjusts columns; height adjusts rows and text. Font preferences are preserved.";
+            if(page=="SCOPE") return "Spectrum / Auto follows the native signal. Motion prediction controls other sensor tracks.";
             if(page=="AMMO") return "Dock to refill tanks and ammo WANT deficits. Relevant-only applies; ammo needs connected ship cargo.";
             return "Hover a setting for details. ESC or the configured menu key returns to the game.";
         }

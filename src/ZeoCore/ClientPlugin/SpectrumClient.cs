@@ -90,22 +90,26 @@ namespace ZeoCore
             }
         }
 
+        public bool LastReadSucceeded { get; private set; }
+
         public List<DetectionData> Read()
         {
+            LastReadSucceeded = false;
             var result = new List<DetectionData>();
             if (_getClientDetections == null) return result;
 
             try
             {
                 byte[] bytes = _getClientDetections();
-                if (bytes == null || bytes.Length == 0) return result;
+                if (bytes == null) return result;
+                if (bytes.Length == 0) { LastReadSucceeded = true; _lastError = ""; return result; }
 
                 try
                 {
                     using (var ms = new MemoryStream(bytes, false))
                     {
                         var decoded = Serializer.Deserialize<List<DetectionData>>(ms);
-                        if (decoded != null) return decoded;
+                        if (decoded != null) { LastReadSucceeded = true; _lastError = ""; return decoded; }
                     }
                 }
                 catch
@@ -117,7 +121,7 @@ namespace ZeoCore
                 try
                 {
                     var decoded = MyAPIGateway.Utilities.SerializeFromBinary<List<DetectionData>>(bytes);
-                    if (decoded != null) return decoded;
+                    if (decoded != null) { LastReadSucceeded = true; _lastError = ""; return decoded; }
                 }
                 catch { }
             }

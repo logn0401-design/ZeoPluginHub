@@ -79,7 +79,7 @@ namespace ZeoOverlay
         internal HudOverlayForm(OverlaySettings settings, int port)
         {
             _settings = settings;
-            LogOverlay("ZeoOverlay V1.4f NATIVE SE UI BRIDGE + WEAPON CORE starting. authoritative game HWND/PID + WC/distress diagnostics active.");
+            LogOverlay("Zeo Core overlay starting. Build " + typeof(HudOverlayForm).Assembly.GetName().Version + ".");
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             // v0.4.4: the capture-safe HUD is an external layered window.

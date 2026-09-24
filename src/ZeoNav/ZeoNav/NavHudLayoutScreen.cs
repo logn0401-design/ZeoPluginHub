@@ -13,11 +13,11 @@ namespace ZeoNav
     internal sealed class NavLayoutModel
     {
         public readonly NavLayoutDraft Draft;
-        private readonly double originalX,originalY;
+        private readonly double originalX,originalY,originalWidth,originalHeight;
         public NavLayoutModel(NavConfig config)
         {
-            originalX=config.HudX; originalY=config.HudY;
-            Draft=new NavLayoutDraft { Token=Guid.NewGuid().ToString("N"),X=originalX,Y=originalY };
+            originalX=config.HudX; originalY=config.HudY; originalWidth=Size(config.HudWidth); originalHeight=Size(config.HudHeight);
+            Draft=new NavLayoutDraft { Token=Guid.NewGuid().ToString("N"),X=originalX,Y=originalY,WidthScale=originalWidth,HeightScale=originalHeight };
         }
         public void Move(double left,double top,double panelW,double panelH,int viewportW,int viewportH)
         {
@@ -29,12 +29,24 @@ namespace ZeoNav
             Draft.Y=Math.Max(-.98,Math.Min(.98,1-top*2/viewportH));
         }
         private static bool Finite(double n) { return !double.IsNaN(n) && !double.IsInfinity(n); }
-        public void Undo() { Draft.X=originalX; Draft.Y=originalY; }
+        public static double Size(double v) { return !Finite(v)||v<=0?1:Math.Max(.5,Math.Min(3,v)); }
+        public void Resize(NavLayoutBounds start,int edges,double dx,double dy,double sw,double sh,int w,int h) {
+            if(start==null||start.Width<=0||start.Height<=0||!Finite(dx)||!Finite(dy)||w<200||h<200)return;
+            sw=Size(sw);sh=Size(sh);
+            double nw=start.Width,nh=start.Height;
+            if((edges&3)!=0)nw=Math.Max(start.Width*.5/sw,Math.Min(start.Width*3/sw,Math.Min((edges&1)!=0?start.X+start.Width-6:w-start.X-6,start.Width+((edges&1)!=0?-dx:dx))));
+            if((edges&12)!=0)nh=Math.Max(start.Height*.5/sh,Math.Min(start.Height*3/sh,Math.Min((edges&4)!=0?start.Y+start.Height-6:h-start.Y-6,start.Height+((edges&4)!=0?-dy:dy))));
+            Move((edges&1)!=0?start.X+start.Width-nw:start.X,(edges&4)!=0?start.Y+start.Height-nh:start.Y,nw,nh,w,h);
+            Draft.WidthScale=Size(sw*nw/start.Width);Draft.HeightScale=Size(sh*nh/start.Height);
+        }
+        public void Undo() { Draft.X=originalX; Draft.Y=originalY; Draft.WidthScale=originalWidth; Draft.HeightScale=originalHeight; }
         public Dictionary<string,object> Changes()
         {
             var result=new Dictionary<string,object>();
             if(Math.Abs(Draft.X-originalX)>1e-9) result["HudX"]=Draft.X;
             if(Math.Abs(Draft.Y-originalY)>1e-9) result["HudY"]=Draft.Y;
+            if(Math.Abs(Draft.WidthScale-originalWidth)>1e-9)result["HudWidth"]=Draft.WidthScale;
+            if(Math.Abs(Draft.HeightScale-originalHeight)>1e-9)result["HudHeight"]=Draft.HeightScale;
             return result;
         }
     }
@@ -49,15 +61,16 @@ namespace ZeoNav
         private readonly NavLayoutModel model;
         private readonly MyGuiControlLabel status;
         private bool down=true,dragging,placeSelected;
-        private double offsetX,offsetY,startX,startY;
+        private double offsetX,offsetY,startX,startY,startW,startH;
+        private NavLayoutBounds resizeStart; private int edges;
         internal NavHudLayoutScreen(NavUiHost host)
             : base(new Vector2(.5f,.5f),new Vector4(0,0,0,0),new Vector2(1,1),true)
         {
             this.host=host; model=new NavLayoutModel(host.Store.Read()); host.Layout=model.Draft; host.Bounds=null;
             DrawMouseCursor=true; CloseButtonEnabled=false; EnabledBackgroundFade=false;
             CanHideOthers=false; CanBeHidden=false;
-            Label(-.354f,-.460f,"ZEO NAV // EDIT TRIP HUD POSITION",.75f);
-            Label(-.354f,-.429f,"Drag the outlined panel. PLACE PANEL lets you drag it from anywhere below.",.50f);
+            Label(-.354f,-.460f,"ZEO NAV // EDIT TRIP HUD",.75f);
+            Label(-.354f,-.429f,"Drag inside to move; drag edges or corners to resize. Text follows panel height.",.50f);
             Button(-.27f,-.387f,.18f,"PLACE PANEL",delegate { placeSelected=true; dragging=false; });
             Button(-.072f,-.387f,.18f,"UNDO",delegate { model.Undo(); dragging=false; });
             Button(.126f,-.387f,.18f,"SAVE",Save);
@@ -85,19 +98,23 @@ namespace ZeoNav
             double x=cursor.X-snapshot.ClientX,y=cursor.Y-snapshot.ClientY;
             if(pressed && !down && !model.Draft.ToolbarContains(x,y) && x>=0 && y>=0 && x<snapshot.ClientW && y<snapshot.ClientH)
             {
-                dragging=placeSelected || bounds.Contains(x,y);
+                edges=placeSelected?0:bounds.Edges(x,y);
+                dragging=placeSelected || bounds.Contains(x,y) || edges!=0;
                 if(dragging)
                 {
                     offsetX=placeSelected ? bounds.Width/2 : x-bounds.X;
                     offsetY=placeSelected ? bounds.Height/2 : y-bounds.Y;
-                    startX=x; startY=y; placeSelected=false;
+                    startX=x; startY=y; resizeStart=bounds; startW=model.Draft.WidthScale; startH=model.Draft.HeightScale; placeSelected=false;
                 }
             }
             if(pressed && dragging && (Math.Abs(x-startX)>2 || Math.Abs(y-startY)>2))
-                model.Move(x-offsetX,y-offsetY,bounds.Width,bounds.Height,snapshot.ClientW,snapshot.ClientH);
+            {
+                if(edges!=0)model.Resize(resizeStart,edges,x-startX,y-startY,startW,startH,snapshot.ClientW,snapshot.ClientH);
+                else model.Move(x-offsetX,y-offsetY,resizeStart.Width,resizeStart.Height,snapshot.ClientW,snapshot.ClientH);
+            }
             if(!pressed) dragging=false;
             down=pressed;
-            status.Text=placeSelected ? "Drag below this toolbar to place the trip panel." : "SAVE commits moved coordinates. UNDO restores the starting position. ESC cancels.";
+            status.Text=placeSelected ? "Drag below this toolbar to place the trip panel." : "SAVE commits layout. UNDO restores starting size and position. ESC cancels.";
             return result;
         }
         private void Save()

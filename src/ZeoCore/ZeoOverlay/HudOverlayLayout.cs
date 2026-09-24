@@ -27,7 +27,7 @@ namespace ZeoOverlay
             float sx=(float)HudLayoutState.GetSize(_settings,id), sy=(float)HudLayoutState.GetSize(_settings,id,true);
             // A change of resolution must not push content beyond the viewport.
             float viewportFit=Math.Min(1,Math.Min((width-24f)/(w*sx),(height-24f)/(h*sy)));
-            float fit=Math.Min(sx,sy)*viewportFit;
+            float fit=sy*viewportFit;
             _panelFit[id]=fit;
             var physical=ClampRect(width,height,x,y,w*sx*viewportFit,h*sy*viewportFit);
             return new RectangleF(physical.X,physical.Y,w*sx*viewportFit/fit,h*sy*viewportFit/fit);
@@ -57,10 +57,11 @@ namespace ZeoOverlay
             using(var format=new StringFormat(StringFormat.GenericTypographic))
             {
                 format.FormatFlags=StringFormatFlags.NoWrap;
+                format.Trimming=StringTrimming.EllipsisCharacter;
                 format.Alignment=right ? StringAlignment.Far : StringAlignment.Near;
                 format.LineAlignment=StringAlignment.Center;
                 var measured=g.MeasureString(text,font,int.MaxValue,format);
-                float fit=Math.Min(1,Math.Min(box.Width/Math.Max(1,measured.Width),box.Height/Math.Max(1,measured.Height)));
+                float fit=Math.Min(1,Math.Min(Math.Max(.8f,box.Width/Math.Max(1,measured.Width)),box.Height/Math.Max(1,measured.Height)));
                 using(var fitted=new Font(font.FontFamily,Math.Max(.5f,font.Size*fit),font.Style,GraphicsUnit.Pixel))
                     g.DrawString(text,fitted,brush,box,format);
             }

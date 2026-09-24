@@ -105,7 +105,7 @@ namespace ZeoCore
             Color("THEME","MENU COLORS","Menu panel","MenuPanelColor",s => s.MenuPanelColor, (s,v) => s.MenuPanelColor=v),
             Color("THEME","MENU COLORS","Menu text","MenuTextColor",s => s.MenuTextColor, (s,v) => s.MenuTextColor=v),
             Color("THEME","MENU COLORS","Menu accent","MenuAccentColor",s => s.MenuAccentColor, (s,v) => s.MenuAccentColor=v),
-            Choice("MARKERS","CONTACT ICONS","MARKER ANCHOR","MarkerAnchor",new[] {"DETECTION POSITION","GRID CENTER","AUTO"},s => s.MarkerAnchor, (s,v) => s.MarkerAnchor=v),
+            Choice("MARKERS","CONTACT ICONS","MARKER ANCHOR","MarkerAnchor",new[] {"SENSOR POSITION","GRID CENTER","SPECTRUM / AUTO"},s => s.MarkerAnchor, (s,v) => s.MarkerAnchor=v),
             Number("MARKERS","SPECTRUM RETICLE","Spectrum reticle scale","SpectrumMarkerScale",0.50,3.00,0.05,2,s => s.SpectrumMarkerScale, (s,v) => s.SpectrumMarkerScale=v),
             Number("MARKERS","SPECTRUM RETICLE","Spectrum track ID scale","SpectrumIdScale",0.50,3.00,0.05,2,s => s.SpectrumIdScale, (s,v) => s.SpectrumIdScale=v),
             Number("MARKERS","FRIENDLY MARKERS","Friendly icon scale","FriendlyMarkerScale",0.50,3.00,0.05,2,s => s.FriendlyMarkerScale, (s,v) => s.FriendlyMarkerScale=v),

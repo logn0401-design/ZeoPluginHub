@@ -121,6 +121,8 @@ new OreOption { Page="HUD", Section="HUD VISIBILITY", Label="Status bar", Key="S
 new OreOption { Page="HUD", Section="HUD VISIBILITY", Label="Column header", Key="ShowColumnHeader", Kind=OreOptionKind.Boolean },
 new OreOption { Page="HUD", Section="HUD GEOMETRY", Label="Position X", Key="PanelX", Kind=OreOptionKind.Number, Min=-1.0, Max=1.0, Step=0.01, Decimals=2, Multiplier=1 },
 new OreOption { Page="HUD", Section="HUD GEOMETRY", Label="Position Y", Key="PanelY", Kind=OreOptionKind.Number, Min=-1.0, Max=1.0, Step=0.01, Decimals=2, Multiplier=1 },
+new OreOption { Page="HUD", Section="HUD GEOMETRY", Label="Frame width", Key="HudWidth", Kind=OreOptionKind.Number, Min=.5, Max=3, Step=.05, Decimals=2, Multiplier=1 },
+new OreOption { Page="HUD", Section="HUD GEOMETRY", Label="Frame height / text", Key="HudHeight", Kind=OreOptionKind.Number, Min=.5, Max=3, Step=.05, Decimals=2, Multiplier=1 },
 new OreOption { Page="HUD", Section="HUD GEOMETRY", Label="Panel scale", Key="PanelScale", Kind=OreOptionKind.Number, Min=0.5, Max=2.0, Step=0.05, Decimals=2, Multiplier=1 },
 new OreOption { Page="HUD", Section="HUD GEOMETRY", Label="Text scale", Key="TextScale", Kind=OreOptionKind.Number, Min=0.5, Max=2.0, Step=0.05, Decimals=2, Multiplier=1 },
 new OreOption { Page="HUD", Section="HUD GEOMETRY", Label="Width scale", Key="PanelWidthScale", Kind=OreOptionKind.Number, Min=0.65, Max=2.5, Step=0.05, Decimals=2, Multiplier=1 },

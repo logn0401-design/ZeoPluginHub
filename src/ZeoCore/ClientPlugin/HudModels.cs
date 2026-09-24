@@ -330,57 +330,27 @@ namespace ZeoCore
         }
 
         private readonly Dictionary<string, Slot> _slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
-        private readonly bool[] _used = new bool[100];
-
-        public int Get(string key)
+        public int Get(string key, string alias = null)
         {
             if (string.IsNullOrEmpty(key)) return 0;
             Slot slot;
-            if (_slots.TryGetValue(key, out slot))
+            if (!_slots.TryGetValue(key, out slot) && (alias == null || !_slots.TryGetValue(alias, out slot)))
             {
-                slot.Seen = DateTime.UtcNow;
-                return slot.Id;
+                var used = new HashSet<int>();
+                foreach (var value in _slots.Values) used.Add(value.Id);
+                int id = 1;
+                while (used.Contains(id)) id++;
+                slot = new Slot { Id = id };
             }
-
-            int id = 0;
-            for (int i = 1; i <= 99; i++)
-            {
-                if (!_used[i])
-                {
-                    id = i;
-                    break;
-                }
-            }
-
-            if (id == 0)
-            {
-                string oldestKey = null;
-                DateTime oldest = DateTime.MaxValue;
-                foreach (var pair in _slots)
-                {
-                    if (pair.Value.Seen < oldest)
-                    {
-                        oldest = pair.Value.Seen;
-                        oldestKey = pair.Key;
-                    }
-                }
-                if (oldestKey != null)
-                {
-                    id = _slots[oldestKey].Id;
-                    _slots.Remove(oldestKey);
-                }
-                if (id == 0) id = 99;
-            }
-
-            _used[id] = true;
-            _slots[key] = new Slot { Id = id, Seen = DateTime.UtcNow };
-            return id;
+            slot.Seen = DateTime.UtcNow;
+            _slots[key] = slot;
+            if (!string.IsNullOrEmpty(alias)) _slots[alias] = slot;
+            return slot.Id;
         }
 
         public void Clear()
         {
             _slots.Clear();
-            Array.Clear(_used, 0, _used.Length);
         }
 
         public void Trim(double seconds)
@@ -393,7 +363,6 @@ namespace ZeoCore
             {
                 int id = _slots[remove[i]].Id;
                 _slots.Remove(remove[i]);
-                if (id >= 1 && id <= 99) _used[id] = false;
             }
         }
     }

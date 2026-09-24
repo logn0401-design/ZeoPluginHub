@@ -837,7 +837,7 @@ namespace ZeoOverlay
             // Locked buddy baseline behavior: MARKER STYLE, ICON PACK, MARKER SMOOTHING,
             // SCOPE LAYOUT and SCOPE SORT remain runtime-locked and are not exposed as
             // misleading controls. Marker anchor and all scale controls remain available.
-            p.Controls.Add(DropRow("MARKER ANCHOR", new[] { "DETECTION POSITION", "GRID CENTER", "AUTO" }, delegate { return _zeoSettings.MarkerAnchor; }, delegate(int v) { _zeoSettings.MarkerAnchor = v; }));
+            p.Controls.Add(DropRow("MARKER ANCHOR", new[] { "SENSOR POSITION", "GRID CENTER", "SPECTRUM / AUTO" }, delegate { return _zeoSettings.MarkerAnchor; }, delegate(int v) { _zeoSettings.MarkerAnchor = v; }));
 
             p.Controls.Add(Section("SPECTRUM RETICLE"));
             p.Controls.Add(NumberRow("Spectrum reticle scale", 0.50M, 3.00M, 0.05M, 2, delegate { return _zeoSettings.SpectrumMarkerScale; }, delegate(double v) { _zeoSettings.SpectrumMarkerScale = v; }));

@@ -20,7 +20,7 @@ namespace ZeoNav
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.0.2-DRIVE-CATALOG-GPS-SEARCH";
+        public const string Version = "1.0.3-HUD-CONSISTENCY";
         private string catalogOverlayPath;
 
         // Pulsar supplies this hash-verified package before Init. Settings remain in dataDir.
@@ -498,6 +498,7 @@ namespace ZeoNav
             c.StopScale = ClampD(c.StopScale, .5, 3.0);
             c.ProgressScale = ClampD(c.ProgressScale, .5, 3.0);
             c.WarningScale = ClampD(c.WarningScale, .5, 3.0);
+            c.HudWidth=NavLayoutModel.Size(c.HudWidth); c.HudHeight=NavLayoutModel.Size(c.HudHeight);
             c.HudX = ClampD(c.HudX, -.98, .98);
             c.HudY = ClampD(c.HudY, -.98, .98);
             c.BackingOpacity = Math.Max(0, Math.Min(245, c.BackingOpacity));

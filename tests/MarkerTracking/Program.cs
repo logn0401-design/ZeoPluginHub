@@ -85,9 +85,28 @@ internal static class Program
         Parallel.For(0,200,i=>gate.Request(a=>concurrent.Enqueue(a),()=>{}));
         Check(concurrent.Count==1,"Concurrent requests remain bounded to one callback");
     }
+    private static void SpectrumAndIdentity() {
+        var pos=new Vector3D(100,200,300);var speed=new Vector3D(60,0,0);
+        Check(SpectrumMotion.Age(180,120)==1,"Age uses observation tick, not last poll");
+        var acceleration=SpectrumMotion.Acceleration(Vector3D.Zero,60,speed,120);
+        Check(Near(SpectrumMotion.Position(pos,speed,acceleration,120,180),pos+new Vector3D(90,0,0)),"Native Spectrum velocity plus acceleration equation");
+        Check(Near(SpectrumMotion.Acceleration(speed,120,speed,120),Vector3D.Zero),"Repeated API samples cannot divide by zero");
+        Check(Near(SpectrumMotion.Acceleration(Vector3D.Zero,0,speed,300),Vector3D.Zero),"Long sample gap resets acceleration");
+        Check(Near(SpectrumMotion.Position(pos,speed,Vector3D.Zero,120,60),pos),"Clock reset cannot predict backward");
+        Check(Near(SpectrumMotion.Position(pos,Vector3D.Zero,acceleration,120,180),pos),"Stopped signal matches native rule");
+        var ids=new TrackIdAllocator();int before=ids.Get("S:100");
+        Check(ids.Get("E:42","S:100")==before,"Confirmed entity discovery preserves prior signal number");
+        Check(ids.Get("E:42")==before,"WeaponCore/fleet source switch preserves number");
+        var distinct=new HashSet<int>();for(int i=0;i<192;i++)distinct.Add(ids.Get("E:"+(1000+i)));
+        Check(distinct.Count==192&&!distinct.Contains(before),"Busy scope does not reuse IDs of active contacts");
+        ids.Trim(30);Check(ids.Get("S:100")==before,"Alias remains live across trimming");
+        ids.Clear();Check(ids.Get("new")==1,"World reset clears identities");
+        var clock=System.Diagnostics.Stopwatch.StartNew();for(int i=0;i<100000;i++)SpectrumMotion.Position(pos,speed,acceleration,120,180);
+        clock.Stop();Console.WriteLine("100,000 Spectrum projections: "+clock.Elapsed.TotalMilliseconds.ToString("0.00")+"ms (offline)");
+    }
     private static int Main()
     {
-        try { Anchors(); Wakeups(); Console.WriteLine("PASS: "+checks+" live-anchor and packet-wakeup assertions."); return 0; }
+        try { Anchors(); Wakeups(); SpectrumAndIdentity(); Console.WriteLine("PASS: "+checks+" live-anchor and packet-wakeup assertions."); return 0; }
         catch(Exception e) { Console.Error.WriteLine(e); return 1; }
     }
 }

@@ -147,6 +147,7 @@ namespace ZeoNavOverlay
             if(source.Layout==null) return source;
             var preview=source.Copy(); preview.Config=source.Config.Copy();
             preview.Config.HudX=source.Layout.X; preview.Config.HudY=source.Layout.Y;
+            preview.Config.HudWidth=source.Layout.WidthScale; preview.Config.HudHeight=source.Layout.HeightScale;
             return preview;
         }
 
@@ -566,6 +567,8 @@ namespace ZeoNavOverlay
             }
         }
 
+        private float resizeFit=1;
+        private static double SafeSize(double v) { return double.IsNaN(v)||double.IsInfinity(v)||v<=0?1:Math.Max(.5,Math.Min(3,v)); }
         private RectangleF CalculatePanelBounds(int width, int height)
         {
             NavConfig c = s.Config;
@@ -584,6 +587,9 @@ namespace ZeoNavOverlay
             float warningRow = 27 * panelScale * (float)c.WarningScale;
             float w = 440 * panelScale * Math.Min(1.55f, 1.0f + (maxHorizontal - 1.0f) * .22f);
             float h = pad * 2 + titleRow + phaseRow + speedRow + signalRow + progressRow + flipRow + stopRow + warningRow;
+            float sx=(float)SafeSize(c.HudWidth),sy=(float)SafeSize(c.HudHeight);
+            float viewportFit=Math.Min(1,Math.Min((width-12)/(w*sx),(height-12)/(h*sy)));
+            resizeFit=sy*viewportFit; w*=sx*viewportFit; h*=sy*viewportFit;
             float cx = (float)((c.HudX + 1.0) * .5 * width);
             float cy = (float)((1.0 - (c.HudY + 1.0) * .5) * height);
             return new RectangleF(
@@ -597,11 +603,14 @@ namespace ZeoNavOverlay
         // show only an outline; previews never fabricate flight/sensor data or enable HUD visibility.
         internal void DrawPanelContent(Graphics g,RectangleF localPanel,RectangleF clientPanel)
         {
-            if(s.Layout==null) { DrawHud(g,localPanel); return; }
+            if(s.Layout==null) { DrawSizedHud(g,localPanel); return; }
             string mode=(s.Config.TripPanelVisibility??"AUTO").ToUpperInvariant();
             bool actual=mode!="HIDDEN" && (mode=="ALWAYS" || s.HudVisible);
-            if(actual) DrawHud(g,localPanel);
+            if(actual) DrawSizedHud(g,localPanel);
             using(var pen=new Pen(Color.FromArgb(210,145,222,238),2)) g.DrawRectangle(pen,localPanel.X,localPanel.Y,localPanel.Width-1,localPanel.Height-1);
+            using(var grip=new SolidBrush(Color.FromArgb(230,145,222,238)))
+                foreach(var point in new[]{new PointF(localPanel.Left,localPanel.Top),new PointF(localPanel.Right,localPanel.Top),new PointF(localPanel.Left,localPanel.Bottom),new PointF(localPanel.Right,localPanel.Bottom),new PointF(localPanel.Left+localPanel.Width/2,localPanel.Top),new PointF(localPanel.Left+localPanel.Width/2,localPanel.Bottom),new PointF(localPanel.Left,localPanel.Top+localPanel.Height/2),new PointF(localPanel.Right,localPanel.Top+localPanel.Height/2)})
+                    g.FillRectangle(grip,point.X-3,point.Y-3,6,6);
             if(!actual)
                 using(var brush=new SolidBrush(Color.FromArgb(225,192,234,245)))
                 using(var font=new Font("Segoe UI",10,FontStyle.Bold)) g.DrawString("TRIP HUD / POSITION PREVIEW",font,brush,localPanel.X+10,localPanel.Y+8);
@@ -614,6 +623,14 @@ namespace ZeoNavOverlay
             g.CompositingMode=oldMode;
         }
 
+        private void DrawSizedHud(Graphics g,RectangleF r) {
+            var saved=g.Save();
+            try {
+                g.SetClip(r,System.Drawing.Drawing2D.CombineMode.Intersect);
+                using(var transform=new Matrix(resizeFit,0,0,resizeFit,r.X*(1-resizeFit),r.Y*(1-resizeFit)))g.MultiplyTransform(transform);
+                DrawHud(g,new RectangleF(r.X,r.Y,r.Width/resizeFit,r.Height/resizeFit));
+            }finally{g.Restore(saved);}
+        }
         private void DrawHud(Graphics g, RectangleF r)
         {
             if (s == null || s.Config == null) return;
@@ -640,22 +657,22 @@ namespace ZeoNavOverlay
             float x = r.X + pad, y = r.Y + pad;
             float usable = r.Width - pad * 2;
 
-            DrawText(g, "ZEO NAV // " + Safe(s.Destination, "NO ROUTE"), p.Text, x, y, 15, c.DestinationScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont));
-            DrawTextRight(g, Dist(s.DistanceMeters), p.Secondary, x + usable, y + 2, 13, c.DistanceScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont));
+            DrawText(g, "ZEO NAV // " + Safe(s.Destination, "NO ROUTE"), p.Text, x, y, 15, c.DestinationScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont), Math.Max(1,usable*.66f));
+            DrawTextRight(g, Dist(s.DistanceMeters), p.Secondary, x + usable, y + 2, 13, c.DistanceScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
             y += titleRow;
             Color stateColor = StateColor(c, p, s.Phase);
-            DrawText(g, s.Phase ?? "DISARMED", stateColor, x, y, 18, c.PhaseScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont));
-            DrawTextRight(g, "ETA " + Time(s.EtaSeconds), p.Text, x + usable, y + 2, 14, c.EtaScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont));
+            DrawText(g, s.Phase ?? "DISARMED", stateColor, x, y, 18, c.PhaseScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont), Math.Max(1,usable*.66f));
+            DrawTextRight(g, "ETA " + Time(s.EtaSeconds), p.Text, x + usable, y + 2, 14, c.EtaScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
             y += phaseRow;
             bool capReady = s.SpeedCapMps > 1 && (s.SpeedCapSource ?? "").IndexOf("WAIT", StringComparison.OrdinalIgnoreCase) < 0;
             string speedLine = capReady
                 ? "SPD " + Speed(s.SpeedMps) + " / " + Speed(s.CommandSpeedMps) + "   CAP " + Speed(s.SpeedCapMps)
                 : "SPD " + Speed(s.SpeedMps) + "   //   CAP WAIT SHIPCORE";
-            DrawText(g, speedLine, p.Text, x, y, 13, c.SpeedScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont));
+            DrawText(g, speedLine, p.Text, x, y, 13, c.SpeedScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable));
             y += speedRow;
             string sig = s.SpectrumKmReady ? "SIG " + SigKmText(s.SpectrumDriveKm) + " / MAX " + SigKmText(s.MaxDriveSigKm) : "SIG KM WAIT / MAX " + SigKmText(s.MaxDriveSigKm);
-            DrawText(g, sig, p.Accent, x, y, 12, c.SignalScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont));
-            DrawTextRight(g, "THRUST " + (s.ForwardCommandRatio * 100).ToString("0") + "%", p.Secondary, x + usable, y, 11, c.SignalScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont));
+            DrawText(g, sig, p.Accent, x, y, 12, c.SignalScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.66f));
+            DrawTextRight(g, "THRUST " + (s.ForwardCommandRatio * 100).ToString("0") + "%", p.Secondary, x + usable, y, 11, c.SignalScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
             y += signalRow;
 
             float progH = 8 * (float)c.ProgressScale * panelScale;
@@ -665,16 +682,16 @@ namespace ZeoNavOverlay
 
             if (s.ManualFlipActive)
             {
-                DrawText(g, "MANUAL FLIP  " + s.ManualFlipDegreesLeft.ToString("0") + "° LEFT", p.Warning, x, y, 16, c.FlipScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont));
+                DrawText(g, "MANUAL FLIP  " + s.ManualFlipDegreesLeft.ToString("0") + "° LEFT", p.Warning, x, y, 16, c.FlipScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont), Math.Max(1,usable));
             }
             else
             {
-                DrawText(g, "FLIP " + (s.FlipInSeconds < 0 ? "--:--" : Time(s.FlipInSeconds)) + "  @ " + Dist(s.FlipAtMeters), p.Warning, x, y, 12, c.FlipScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont));
+                DrawText(g, "FLIP " + (s.FlipInSeconds < 0 ? "--:--" : Time(s.FlipInSeconds)) + "  @ " + Dist(s.FlipAtMeters), p.Warning, x, y, 12, c.FlipScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable));
                 y += flipRow;
-                DrawText(g, "STOP " + Dist(s.StopDistanceMeters) + "   LAT " + s.LateralMps.ToString("0.0") + " M/S", p.Secondary, x, y, 11, c.StopScale * c.GlobalScale, FontStyle.Regular, HudBodyFont(c, true, effectiveFrame, effectiveFont));
+                DrawText(g, "STOP " + Dist(s.StopDistanceMeters) + "   LAT " + s.LateralMps.ToString("0.0") + " M/S", p.Secondary, x, y, 11, c.StopScale * c.GlobalScale, FontStyle.Regular, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable));
             }
             if (!string.IsNullOrWhiteSpace(s.WarningText))
-                DrawText(g, s.WarningText, p.Danger, x, r.Bottom - warningRow, 11, c.WarningScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, false, effectiveFrame, effectiveFont));
+                DrawText(g, s.WarningText, p.Danger, x, r.Bottom - warningRow, 11, c.WarningScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, false, effectiveFrame, effectiveFont), Math.Max(1,usable));
         }
 
         private void Present(Bitmap bitmap, int left, int top)
@@ -1142,19 +1159,26 @@ namespace ZeoNavOverlay
             return technical ? "Consolas" : "Segoe UI Semibold";
         }
 
-        private static void DrawText(Graphics g, string t, Color c, float x, float y, float pt, double scale, FontStyle style, string fontName)
+        private static void DrawText(Graphics g, string t, Color c, float x, float y, float pt, double scale, FontStyle style, string fontName, float maxWidth=float.MaxValue)
         {
             using (var f = new Font(fontName, Math.Max(6, (float)(pt * scale)), style, GraphicsUnit.Pixel))
             using (var b = new SolidBrush(c))
-                g.DrawString(t ?? "", f, b, x, y);
+                DrawField(g,t,f,b,new RectangleF(x,y,Math.Min(maxWidth,g.MeasureString(t??"",f).Width+4),f.Height*1.2f),false);
         }
 
-        private static void DrawTextRight(Graphics g, string t, Color c, float right, float y, float pt, double scale, string fontName)
+        private static void DrawTextRight(Graphics g, string t, Color c, float right, float y, float pt, double scale, string fontName, float maxWidth=float.MaxValue)
         {
             using (var f = new Font(fontName, Math.Max(6, (float)(pt * scale)), FontStyle.Regular, GraphicsUnit.Pixel))
             {
                 SizeF z = g.MeasureString(t ?? "", f);
-                using (var b = new SolidBrush(c)) g.DrawString(t ?? "", f, b, right - z.Width, y);
+                using (var b = new SolidBrush(c)) DrawField(g,t,f,b,new RectangleF(right-Math.Min(maxWidth,z.Width),y,Math.Min(maxWidth,z.Width),f.Height*1.2f),true);
+            }
+        }
+        private static void DrawField(Graphics g,string text,Font font,Brush brush,RectangleF box,bool right) {
+            using(var format=new StringFormat(StringFormat.GenericTypographic)) {
+                format.FormatFlags=StringFormatFlags.NoWrap;format.Trimming=StringTrimming.EllipsisCharacter;
+                format.Alignment=right?StringAlignment.Far:StringAlignment.Near;
+                g.DrawString(text??"",font,brush,box,format);
             }
         }
         private static float Clamp(float v, float a, float b) { return v < a ? a : v > b ? b : v; }

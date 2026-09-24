@@ -7,6 +7,7 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="All" />
     <Reference Include="VRage.Math"><HintPath>$(Bin64)/VRage.Math.dll</HintPath></Reference>
     <Compile Include="../../src/ZeoCore/ClientPlugin/HudModels.cs" Link="HudModels.cs" />
+    <Compile Include="../../src/ZeoCore/ClientPlugin/SpectrumMotion.cs" />
     <Compile Include="../../src/ZeoCore/ClientPlugin/MarkerPositionResolver.cs" Link="MarkerPositionResolver.cs" />
     <Compile Include="../../src/ZeoCore/ZeoOverlay/MarkerRenderWakeup.cs" Link="MarkerRenderWakeup.cs" />
   </ItemGroup>

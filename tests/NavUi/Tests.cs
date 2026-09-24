@@ -113,6 +113,15 @@ internal static class Tests
             layout.Move(-999,99999,440,267,viewport[0],viewport[1]);
             Check(Math.Abs(layout.Draft.X)<=.98 && Math.Abs(layout.Draft.Y)<=.98,"viewport clamp "+viewport[0]);
         }
+        var start=new NavLayoutBounds{X=100,Y=200,Width=440,Height=267};
+        Check(start.Edges(100,200)==5&&start.Edges(300,300)==0,"resize grip hit regions");
+        layout.Resize(start,10,220,133.5,1,1,1920,1080);
+        Check(Math.Abs(layout.Draft.WidthScale-1.5)<1e-8&&Math.Abs(layout.Draft.HeightScale-1.5)<1e-8,"corner resizes both axes");
+        layout.Resize(start,2,-220,0,1,1,1920,1080);
+        Check(layout.Draft.WidthScale==.5&&layout.Draft.HeightScale==1,"width only leaves text-height setting intact");
+        layout.Resize(start,2,0,0,1,1,1920,1080);
+        Check(layout.Draft.WidthScale==1&&layout.Draft.HeightScale==1,"grow from frozen origin recovers starting size");
+        Check(ConfigRules.Clamp(new NavConfig{HudWidth=0,HudHeight=0}).HudHeight==1,"old config missing resize fields gets 100 percent");
         layout.Undo(); Check(layout.Changes().Count==0,"undo returns to edit-session start");
         layout.Move(double.NaN,1,440,267,1920,1080); Check(layout.Changes().Count==0,"invalid drag ignored");
         string before=File.ReadAllText(path); layout.Move(500,300,440,267,1920,1080);
@@ -152,6 +161,18 @@ internal static class Tests
         Check((string)configType.GetField("TripPanelVisibility").GetValue(previewConfig)=="HIDDEN","preview does not change visibility");
         object hud=FormatterServices.GetUninitializedObject(hudType);
         var apply=hudType.GetMethod("Apply"); var boundsMethod=hudType.GetMethod("CalculatePanelBounds",BindingFlags.NonPublic|BindingFlags.Instance); var draw=hudType.GetMethod("DrawPanelContent",BindingFlags.NonPublic|BindingFlags.Instance);
+        foreach(var size in new[]{new[]{.5,1.0},new[]{1.0,2.0},new[]{2.0,.5},new[]{1.0,1.0}}) {
+            set(previewConfig,"HudWidth",size[0]);set(previewConfig,"HudHeight",size[1]);set(previewConfig,"TripPanelVisibility","ALWAYS");
+            set(preview,"Destination","A long navigation destination that must never overlap its distance");
+            apply.Invoke(hud,new[]{preview});var bound=(RectangleF)boundsMethod.Invoke(hud,new object[]{1920,1080});
+            using(var image=new Bitmap(1920,1080))using(var g=Graphics.FromImage(image)) {
+                var transform=g.Transform.Elements;draw.Invoke(hud,new object[]{g,bound,bound});
+                Check(transform.SequenceEqual(g.Transform.Elements),"Nav restores graphics transform after resizing");
+                Check(bound.Right<=1920&&bound.Bottom<=1080,"Nav resized bounds within viewport");
+                image.Save(Path.Combine(scratch,"resize-"+size[0]+"x"+size[1]+".png"));
+            }
+        }
+        set(previewConfig,"HudWidth",1d);set(previewConfig,"HudHeight",1d);set(previewConfig,"TripPanelVisibility","HIDDEN");
         foreach(var viewport in new[] {new[]{1280,720},new[]{1920,1080},new[]{3440,1440}})
         {
             apply.Invoke(hud,new[]{preview}); RectangleF bounds=(RectangleF)boundsMethod.Invoke(hud,new object[]{viewport[0],viewport[1]});

@@ -15,6 +15,7 @@ namespace ZeoCore
         {
             public SpectrumClient.DetectionData Detection;
             public int LastSeenFrame;
+            public Vector3D Acceleration;
         }
 
         private readonly ZeoCoreEngine _engine;
@@ -28,6 +29,7 @@ namespace ZeoCore
         private readonly Dictionary<long, List<HudTrack>> _fusionBuckets = new Dictionary<long, List<HudTrack>>();
         private readonly List<Vector2D> _occupied = new List<Vector2D>(64);
 
+        private readonly HudPerformance _performance=new HudPerformance();
         private int _lastSpectrumFrame = -100000;
         private int _lastTrackBuildFrame = -100000;
         private DateTime _lastTrackBuildUtc = DateTime.MinValue;
@@ -156,10 +158,13 @@ namespace ZeoCore
 
             _distressGps.Update(_fleet, _settings.ReceiveFleetLink, _engine.GetLocalFactionTag());
 
-            if (frame < _lastSpectrumFrame || frame - _lastSpectrumFrame >= 10)
+            int signalCadence = !_settings.AdaptiveTacticalRate || _spectrumCache.Count < 48 ? 3 : _spectrumCache.Count < 96 ? 6 : 10;
+            if (frame < _lastSpectrumFrame || frame - _lastSpectrumFrame >= signalCadence)
             {
                 _lastSpectrumFrame = frame;
+                long sampleStart=System.Diagnostics.Stopwatch.GetTimestamp();
                 RefreshSpectrumCache(frame);
+                _performance.Record(0,sampleStart);
             }
 
             // 30 Hz overlay packets at a nominal 60 Hz simulation update. The overlay
@@ -180,6 +185,8 @@ namespace ZeoCore
                 PublishCameraMarkers();
             }
 
+            string performance = _performance.Flush();
+            if(performance!=null) Plugin.Log(performance);
             if (!_readyLogged && _overlay.Running)
             {
                 _readyLogged = true;
@@ -441,6 +448,24 @@ namespace ZeoCore
             }
 
             List<SpectrumClient.DetectionData> fresh = _spectrum.Read();
+            if (!_spectrum.LastReadSucceeded)
+            {
+                foreach (var entry in _spectrumPersistent.Values)
+                    if (SpectrumMotion.Age(frame, entry.Detection.DetectedAt) <= 15)
+                        _spectrumCache.Add(entry.Detection);
+                return;
+            }
+            ApplySpectrumSnapshot(fresh, frame);
+        }
+
+        private void ApplySpectrumSnapshot(List<SpectrumClient.DetectionData> fresh, int frame)
+        {
+            _spectrumCache.Clear();
+            // Spectrum already retains fading signals and removes retired emitter IDs.
+            // Its successful snapshot is authoritative; do not add another ghost hold.
+            var active = new HashSet<long>(fresh.Select(d => d.EmitterId));
+            foreach (long id in _spectrumPersistent.Keys.Where(id => !active.Contains(id)).ToArray())
+                _spectrumPersistent.Remove(id);
             _engine.SetSharedSpectrumDetections(_settings.ShareSpectrumSignals ? fresh : null);
 
             if (!_settings.ShowLocalSpectrum)
@@ -458,6 +483,9 @@ namespace ZeoCore
                     seen = new SpectrumSeen();
                     _spectrumPersistent[d.EmitterId] = seen;
                 }
+                if (seen.LastSeenFrame != 0 && d.DetectedAt != seen.Detection.DetectedAt)
+                    seen.Acceleration = SpectrumMotion.Acceleration(seen.Detection.Velocity,
+                        seen.Detection.DetectedAt, d.Velocity, d.DetectedAt);
                 seen.Detection = d;
                 seen.LastSeenFrame = frame;
             }
@@ -479,7 +507,7 @@ namespace ZeoCore
             SpectrumSeen seen;
             if (!_spectrumPersistent.TryGetValue(emitterId, out seen)) return 0;
             if (frame < seen.LastSeenFrame) return 0;
-            return Math.Max(0, (frame - seen.LastSeenFrame) / 60.0);
+            return SpectrumMotion.Age(frame, seen.Detection.DetectedAt);
         }
 
         // ZEOCORE_V067H3_DIRECT_HUD_SYNC
@@ -541,6 +569,7 @@ namespace ZeoCore
                 _trackPerfClock.Restart();
                 BuildTracks(frame, local, fleet);
                 _trackPerfClock.Stop();
+                _performance.RecordMilliseconds(1,_trackPerfClock.Elapsed.TotalMilliseconds);
                 _lastTrackBuildUtc = DateTime.UtcNow;
 
                 if (_trackPerfClock.Elapsed.TotalMilliseconds >= 6.0 &&
@@ -699,6 +728,7 @@ namespace ZeoCore
 
         private List<OverlayMarker> ProjectMarkers(IMyCamera camera,List<HudTrack> selected,double renderPredictionAge)
         {
+            long markerStart=System.Diagnostics.Stopwatch.GetTimestamp();
             var markers=new List<OverlayMarker>(selected.Count);
                 _occupied.Clear();
                 for (int i = 0; i < selected.Count; i++)
@@ -706,7 +736,18 @@ namespace ZeoCore
                     HudTrack t = selected[i];
                     Vector2D screen;
                     bool offscreen;
-                    Vector3D renderPosition = MarkerPositionResolver.Resolve(t, _settings.MarkerAnchor,
+                    Vector3D renderPosition;
+                    if (t.Source == HudTrackSource.Spectrum && _settings.MarkerAnchor != HudMarkerAnchor.GridCenter)
+                    {
+                        long emitter;
+                        SpectrumSeen signal;
+                        if (!long.TryParse(t.RawEmitterId, out emitter) || !_spectrumPersistent.TryGetValue(emitter, out signal)) continue;
+                        int tick = MyAPIGateway.Session.GameplayFrameCounter;
+                        if (SpectrumMotion.Age(tick, signal.Detection.DetectedAt) > 15) continue;
+                        renderPosition = SpectrumMotion.Position(signal.Detection.Position, signal.Detection.Velocity,
+                            signal.Acceleration, signal.Detection.DetectedAt, tick);
+                    }
+                    else renderPosition = MarkerPositionResolver.Resolve(t, _settings.MarkerAnchor,
                         renderPredictionAge, _settings.StaleSeconds, LiveMarkerPosition);
                     Project(camera, renderPosition, out screen, out offscreen);
 
@@ -735,6 +776,7 @@ namespace ZeoCore
                         DistressSecondsRemaining = t.DistressSecondsRemaining
                     });
                 }
+            _performance.Record(2,markerStart);
             return markers;
         }
 
@@ -790,7 +832,6 @@ namespace ZeoCore
             _trackByEntity.Clear();
             _fusionBuckets.Clear();
             int processCap = Math.Max(24, Math.Min(192, _settings.TacticalProcessingCap));
-            var exactIds = new HashSet<long>();
 
             // v0.4.3: projection is rendered at 30 Hz while WC/Spectrum/Fleet samples
             // arrive less often. Advance the last known position by velocity between
@@ -811,11 +852,10 @@ namespace ZeoCore
                     HudTrack t = local.WeaponCoreTracks[i].Clone();
                     if (t.EntityId == local.OwnGridId) continue;
                     t.Key = "W:" + t.EntityId;
-                    t.TrackId = _ids.Get(t.Key);
                     PredictPosition(t, localAge);
                     AddKinematics(t, originNow, originVelocity);
                     if (Allowed(t)) AddTrack(t);
-                    if (t.EntityId != 0) exactIds.Add(t.EntityId);
+
                 }
             }
 
@@ -836,11 +876,10 @@ namespace ZeoCore
                     ResolveFleetSector(t, local);
                     if (!CanProjectFleetTrack(t)) continue;
                     t.Key = "F:" + t.EntityId;
-                    t.TrackId = _ids.Get(t.Key);
                     PredictPosition(t, PredictionAge(t.AgeSeconds));
                     AddKinematics(t, originNow, originVelocity);
                     if (Allowed(t)) AddTrack(t);
-                    if (t.EntityId != 0) exactIds.Add(t.EntityId);
+
                 }
             }
 
@@ -866,7 +905,6 @@ namespace ZeoCore
                     ResolveFleetSector(t, local);
                     if (!CanProjectFleetTrack(t)) continue;
                     t.Key = (sharedSignal ? "FS:" : "C:") + t.EntityId;
-                    t.TrackId = _ids.Get(t.Key);
                     PredictPosition(t, PredictionAge(t.AgeSeconds));
                     AddKinematics(t, originNow, originVelocity);
 
@@ -880,7 +918,7 @@ namespace ZeoCore
                     }
 
                     if (Allowed(t)) AddTrack(t);
-                    if (t.EntityId != 0) exactIds.Add(t.EntityId);
+
                 }
             }
 
@@ -896,7 +934,6 @@ namespace ZeoCore
                     ResolveFleetSector(t,local);
                     if (!CanProjectDistressTrack(t)) continue;
                     t.Key="D:"+t.EntityId;
-                    t.TrackId=_ids.Get(t.Key);
                     t.Friendly=true;
                     t.Relation="distress";
                     t.IsDistress=true;
@@ -909,13 +946,14 @@ namespace ZeoCore
 
             if (haveOrigin && _settings.ShowLocalSpectrum)
             {
+                AccountLinkSnapshot spectrumAccount = _engine.GetAccountLink();
+                string spectrumOwnFaction = spectrumAccount == null ? "" : (spectrumAccount.FactionTag ?? "").Trim();
                 for (int i = 0; i < _spectrumCache.Count && i < processCap; i++)
                 {
                     var d = _spectrumCache[i];
                     if (d.SelfOwned) continue;
 
-                    AccountLinkSnapshot account = _engine.GetAccountLink();
-                    string ownFaction = account == null ? "" : (account.FactionTag ?? "").Trim();
+                    string ownFaction = spectrumOwnFaction;
                     string detectedFaction = (d.FactionTag ?? "").Trim();
                     bool spectrumFriendly =
                         ownFaction.Length > 0 &&
@@ -923,14 +961,16 @@ namespace ZeoCore
                         string.Equals(ownFaction, detectedFaction, StringComparison.OrdinalIgnoreCase);
 
                     long spectrumId = d.EmitterId;
-                    Vector3D spectrumPosition = ResolveSpectrumAnchor(d.EmitterId, d.Position);
-                    NormalizeSpectrumGridIdentity(d.EmitterId, ref spectrumId, ref spectrumPosition);
+                    Vector3D spectrumPosition = d.Position;
+                    NormalizeSpectrumGridIdentity(d.EmitterId, ref spectrumId);
+                    SpectrumSeen signal;
+                    if (_spectrumPersistent.TryGetValue(d.EmitterId, out signal))
+                        spectrumPosition = SpectrumMotion.Position(d.Position, d.Velocity, signal.Acceleration, d.DetectedAt, frame);
 
                     HudTrack t = new HudTrack
                     {
                         EntityId = spectrumId,
                         Key = "S:" + d.EmitterId,
-                        TrackId = _ids.Get("S:" + d.EmitterId),
                         Name = !string.IsNullOrWhiteSpace(d.DetailText) ? d.DetailText :
                             (!string.IsNullOrWhiteSpace(d.FactionTag) ? d.FactionTag : "SIGNAL"),
                         Relation = spectrumFriendly ? "friendly" : "unknown",
@@ -942,7 +982,6 @@ namespace ZeoCore
                         SignalStrength = double.IsNaN(d.Strength) || double.IsInfinity(d.Strength) ? (double?)null : d.Strength,
                         RawEmitterId = d.EmitterId.ToString(System.Globalization.CultureInfo.InvariantCulture)
                     };
-                    PredictPosition(t, PredictionAge(t.AgeSeconds));
                     AddKinematics(t, originNow, originVelocity);
 
                     HudTrack existing = FindExistingByEntityId(t.EntityId);
@@ -955,7 +994,7 @@ namespace ZeoCore
                         // WeaponCore/shared knowledge is merged into it. This uses the
                         // V1.3 dictionary + spatial-bucket resolver and avoids the old
                         // O(N^2) post-pass that could hurt personal sim speed.
-                        if (existing.Source == HudTrackSource.Spectrum)
+                        if (existing.Source == HudTrackSource.Spectrum && existing.AgeSeconds <= t.AgeSeconds)
                         {
                             MergeTrackKnowledge(existing, t);
                         }
@@ -976,7 +1015,11 @@ namespace ZeoCore
                 // Spectrum/Fleet rather than the local WC threat list.
                 if (local.FocusEntityId != 0 && _tracks[i].EntityId == local.FocusEntityId)
                     _tracks[i].Focused = true;
-                _tracks[i].Priority = Score(_tracks[i]);
+                var identified = _tracks[i];
+                string stable = identified.IsDistress ? identified.Key :
+                    (identified.EntityId != 0 ? "E:" + identified.EntityId : identified.Key);
+                identified.TrackId = _ids.Get(stable, identified.Source == HudTrackSource.Spectrum ? identified.Key : null);
+                identified.Priority = Score(identified);
             }
 
             _ids.Trim(Math.Max(_settings.LastKnownSeconds + 5, 30));
@@ -1097,7 +1140,7 @@ namespace ZeoCore
             }
         }
 
-        private static void NormalizeSpectrumGridIdentity(long emitterId, ref long entityId, ref Vector3D position)
+        private static void NormalizeSpectrumGridIdentity(long emitterId, ref long entityId)
         {
             if (emitterId == 0 || MyAPIGateway.Entities == null) return;
             try
@@ -1112,30 +1155,9 @@ namespace ZeoCore
                 }
                 if (grid == null) return;
                 entityId = grid.EntityId;
-                position = grid.WorldAABB.Center;
+
             }
             catch { }
-        }
-
-        private Vector3D ResolveSpectrumAnchor(long emitterId, Vector3D detectionPosition)
-        {
-            if (_settings.MarkerAnchor == HudMarkerAnchor.DetectionPosition) return detectionPosition;
-
-            try
-            {
-                IMyEntity entity;
-                if (emitterId != 0 && MyAPIGateway.Entities != null &&
-                    MyAPIGateway.Entities.TryGetEntityById(emitterId, out entity) && entity != null)
-                {
-                    if (_settings.MarkerAnchor == HudMarkerAnchor.GridCenter || _settings.MarkerAnchor == HudMarkerAnchor.Auto)
-                        return entity.WorldAABB.Center;
-                }
-            }
-            catch { }
-
-            // GridCenter deliberately falls back instead of dropping the marker. Spectrum
-            // emitter IDs are not guaranteed to be a replicated grid entity on every contact.
-            return detectionPosition;
         }
 
         private bool Allowed(HudTrack t)
@@ -1317,7 +1339,8 @@ namespace ZeoCore
             if (incoming.SignalStrength.HasValue && (!existing.SignalStrength.HasValue || incoming.AgeSeconds <= existing.AgeSeconds))
             {
                 existing.SignalStrength = incoming.SignalStrength;
-                existing.RawEmitterId = incoming.RawEmitterId;
+                if (existing.Source != HudTrackSource.Spectrum || string.IsNullOrWhiteSpace(existing.RawEmitterId))
+                    existing.RawEmitterId = incoming.RawEmitterId;
             }
             if (incoming.Focused) existing.Focused = true;
             if (incoming.Threat > existing.Threat) existing.Threat = incoming.Threat;

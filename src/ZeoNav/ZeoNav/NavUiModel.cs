@@ -81,6 +81,8 @@ namespace ZeoNav
             choice("TRIP HUD","PLACEMENT","@PRESET","Position preset",Presets);
             number("TRIP HUD","PLACEMENT","HudX","Position X",-.98,.98,.01,2);
             number("TRIP HUD","PLACEMENT","HudY","Position Y",-.98,.98,.01,2);
+            number("TRIP HUD","SIZING","HudWidth","Frame width",.5,3,.05,2);
+            number("TRIP HUD","SIZING","HudHeight","Frame height / text",.5,3,.05,2);
             number("TRIP HUD","SIZING","PanelScale","Panel scale",.45,2.5,.05,2);
             number("TRIP HUD","SIZING","GlobalScale","Text scale",.5,2.75,.05,2);
             number("TRIP HUD","BACKING","BackingOpacity","Backing opacity",0,245,5,0);
@@ -136,7 +138,7 @@ namespace ZeoNav
         public static Dictionary<string,object> ResetTrip()
         {
             var defaults=new NavConfig();
-            string[] keys={"TripPanelVisibility","TripUseHudTheme","HudX","HudY","GlobalScale","PanelScale","BackingOpacity","InnerPadding","BorderWidth","DestinationScale","DistanceScale","SpeedScale","SignalScale","EtaScale","PhaseScale","FlipScale","StopScale","ProgressScale","WarningScale"};
+            string[] keys={"TripPanelVisibility","TripUseHudTheme","HudX","HudY","HudWidth","HudHeight","GlobalScale","PanelScale","BackingOpacity","InnerPadding","BorderWidth","DestinationScale","DistanceScale","SpeedScale","SignalScale","EtaScale","PhaseScale","FlipScale","StopScale","ProgressScale","WarningScale"};
             return keys.ToDictionary(k=>k,k=>typeof(NavConfig).GetField(k).GetValue(defaults));
         }
     }

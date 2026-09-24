@@ -83,6 +83,16 @@ internal static class Program
     if(viewport.Width==1920)sheet.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"panels-"+aspect.Width+"x"+aspect.Height+".png"));
    }
   }
+  // Font scale must recover each frame and must not depend on width.
+  var fitter=typeof(HudOverlayForm).GetMethod("SizedPanelRectangle",Hidden);
+  foreach(var id in HudLayoutState.Ids){
+   foreach(double w in new[]{.5,2.0,1.0}){
+    var d=HudLayoutState.Capture(settings);foreach(var panel in d.Panels){panel.WidthScale=w;panel.HeightScale=1.25;}d.ApplyTo(settings);
+    fitter.Invoke(form,new object[]{id,1920,1080,10f,10f,400f,200f});
+    var fits=(Dictionary<string,float>)typeof(HudOverlayForm).GetField("_panelFit",Hidden).GetValue(form);
+    Check(Near(fits[id],1.25),"Width does not ratchet text scale "+id);
+   }
+  }
   // Preview applies draft dimensions temporarily and restores all settings.
   using(var b=new Bitmap(1920,1080))using(var g=Graphics.FromImage(b)){
    var saved=HudLayoutState.Capture(settings);frame.Layout=HudLayoutState.Capture(settings);frame.Layout.Panels.First(x=>x.Id=="ammo").WidthScale=.75;frame.Layout.Toolbar=new HudPanelBounds{X=0,Y=0,Width=1920,Height=190};

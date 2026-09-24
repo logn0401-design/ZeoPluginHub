@@ -34,6 +34,7 @@ namespace ZeoNavOverlay
         [DataMember] public string Frame = "WAR ROOM";
         [DataMember] public string Theme = "WAR ROOM";
         [DataMember] public string FontStyle = "MATCH HUD";
+        [DataMember] public double HudWidth = 1, HudHeight = 1;
         [DataMember] public double HudX = -0.88;
         [DataMember] public double HudY = 0.72;
         [DataMember] public double GlobalScale = 1.0;
@@ -190,6 +191,7 @@ namespace ZeoNavOverlay
     {
         [DataMember] public string Token;
         [DataMember] public double X, Y;
+        [DataMember] public double WidthScale = 1, HeightScale = 1;
         [DataMember] public double ToolbarX, ToolbarY, ToolbarW, ToolbarH;
         public bool ToolbarContains(double x,double y) { return x>=ToolbarX && y>=ToolbarY && x<=ToolbarX+ToolbarW && y<=ToolbarY+ToolbarH; }
     }
@@ -200,6 +202,11 @@ namespace ZeoNavOverlay
         [DataMember] public double X, Y, Width, Height;
         [DataMember] public int ViewportW, ViewportH;
         public bool Contains(double x,double y) { return x>=X && y>=Y && x<=X+Width && y<=Y+Height; }
+        public int Edges(double x,double y) {
+            if(x<X-10||y<Y-10||x>X+Width+10||y>Y+Height+10)return 0;
+            return (System.Math.Abs(x-X)<=10?1:System.Math.Abs(x-X-Width)<=10?2:0) |
+                (System.Math.Abs(y-Y)<=10?4:System.Math.Abs(y-Y-Height)<=10?8:0);
+        }
     }
 }
 
