@@ -120,6 +120,26 @@ namespace ZeoCore
             }
         }
 
+        public bool ShotMonitorReady { get { return Ready && _delegates.ContainsKey("AddMonitorProjectile") && _delegates.ContainsKey("RemoveMonitorProjectile"); } }
+        public bool WeaponParts(MyEntity weapon, IDictionary<string,int> output)
+        {
+            Delegate endpoint;
+            try { if(!_delegates.TryGetValue("GetBlockWeaponMapBase",out endpoint)&&!_delegates.TryGetValue("GetBlockWeaponMap",out endpoint))return false; endpoint.DynamicInvoke(weapon,output);return output.Count>0; } catch {return false;}
+        }
+        public bool AddShotMonitor(MyEntity w,int part,Action<long,int,ulong,long,Vector3D,bool> cb)
+        {try{var fn=Bind<Action<MyEntity,int,Action<long,int,ulong,long,Vector3D,bool>>>("AddMonitorProjectile");if(fn==null)return false;fn(w,part,cb);return true;}catch{return false;}}
+        public void RemoveShotMonitor(MyEntity w,int part,Action<long,int,ulong,long,Vector3D,bool> cb)
+        {try{Bind<Action<MyEntity,int,Action<long,int,ulong,long,Vector3D,bool>>>("RemoveMonitorProjectile")?.Invoke(w,part,cb);}catch{}}
+        public bool ProjectileState(ulong id,out Vector3D velocity,out string ammo,out float health)
+        {Vector3D pos;return ProjectileSample(id,out pos,out velocity,out ammo,out health);}
+        public bool ProjectileSample(ulong id,out Vector3D pos,out Vector3D velocity,out string ammo,out float health)
+        {
+            pos=velocity=Vector3D.Zero;ammo=null;health=0;
+            try{var fn=Bind<Func<ulong,MyTuple<Vector3D,Vector3D,float,float,long,string>>>("GetProjectileState");if(fn==null)return false;
+                var x=fn(id);if(string.IsNullOrWhiteSpace(x.Item6)||!x.Item1.IsValid()||!x.Item2.IsValid())return false;
+                pos=x.Item1;velocity=x.Item2;health=x.Item4;ammo=x.Item6;return true;}catch{return false;}
+        }
+
         public void Dispose()
         {
             try

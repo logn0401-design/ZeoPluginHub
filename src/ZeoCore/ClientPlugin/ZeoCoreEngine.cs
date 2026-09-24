@@ -229,12 +229,17 @@ namespace ZeoCore
 
         }
 
+        private CombatCapture _combat;
         public void Update()
         {
             var session = MyAPIGateway.Session;
             if (session == null || MyAPIGateway.Utilities == null)
-                return;
+            { if(_combat!=null){_combat.Dispose();_combat=null;} return; }
 
+            if(_combat==null)_combat=new CombatCapture(_wc);
+            IMyPlayer combatPlayer; IMyCubeGrid combatGrid; IMyCubeBlock combatControl;
+            bool combatControlled=TryControlledGrid(out combatPlayer,out combatGrid,out combatControl);
+            try{_combat.Update(combatControlled?combatGrid:null, session.GameplayFrameCounter, TelemetryExportActive);}catch(Exception ex){Plugin.Log("Combat capture: "+ex.Message);_combat.Dispose();}
             EnsureChat();
             _wc.EnsureLoaded();
 
@@ -1021,7 +1026,7 @@ namespace ZeoCore
                 { "self", self },
                 { "friendlies", friendlies },
                 { "contacts", contacts },
-                { "fire", new Dictionary<string, object> { { "events", new object[0] } } }
+                { "fire", new Dictionary<string, object> { { "events", _combat == null ? new object[0] : _combat.Drain() } } }
             };
 
             var source = new Dictionary<string, object>
@@ -1119,6 +1124,9 @@ namespace ZeoCore
                     {
                         { "zeoDirect", true },
                         { "weaponCore", _wc.Ready },
+                        { "combatTelemetry", _wc.ShotMonitorReady },
+                        { "combatMonitoredParts", _combat == null ? 0 : _combat.MonitoredParts },
+                        { "combatDroppedEvents", _combat == null ? 0 : _combat.Dropped },
                         { "reporter", "ZeoCore v" + Plugin.Version }
                     }
                 }
@@ -1472,6 +1480,7 @@ namespace ZeoCore
             }
             catch { }
             _chatRegistered = false;
+            try { if(_combat!=null)_combat.Dispose(); } catch { }
             try { _wc.Dispose(); } catch { }
             try { if (_account != null) _account.Dispose(); } catch { }
             _account = null;

@@ -8,7 +8,7 @@ namespace ZeoCore
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.0.4-OVERLAY-LIFETIME";
+        public const string Version = "1.0.5-COMBAT-TELEMETRY";
         public static Plugin Instance { get; private set; }
 
         // Pulsar supplies the matching, hash-verified overlay before Init.
