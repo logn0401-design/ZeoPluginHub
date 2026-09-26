@@ -4,12 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Ore Helper</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.4 - Simpler search menu, clearer settings, native key binding and resizable HUD.</Tooltip>
-  <Description>Learned ore search, configurable pings, optional SDX2 estimates and approximate nearby deposits. Common search controls have one home. Clearer categories and tooltips, ANY / ALL ore matching, one MOVE / RESIZE HUD button and native MENU KEY binding. Search starts off each launch. Windows / Pulsar Legacy.</Description>
+  <Tooltip>1.0.5 — Asteroid and ore survey, search filters and configurable mining HUD.</Tooltip>
+  <Description>Asteroid and ore survey, search filters and configurable mining HUD. Native press-to-set menu controls and matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local entries for this plugin before enabling this catalog entry.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>c2e2c1dabd82fe34ef36c2bbeb55d2c4ef08ad0a</Commit>
-  <SourceDirectories><Directory>loader/ZeosOreHelper/</Directory></SourceDirectories>
-  <Asset Name="ZeosOreHelperRuntime" Path="assets/orehelper/1.0.4/ZeosOreHelper.Runtime.dll" Sha256="bd72eecffadd4badef8c5321f95bf8e2dd0c29020514bccbabd2e4b907994ea7" Reference="true" />
-  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/1.0.4/ZeosOreOverlay.zip" Sha256="5c1d4ce4b90d00e2f2425a90ba098dfabf41ab1b5a5c5439fae6f91196357df2" Extract="true" />
+  <Commit>30c14fc5e31b3a41c37831d998c2f9f54d060d6c</Commit>
+  <SourceDirectories>
+    <Directory>loader/ZeosOreHelper/</Directory>
+  </SourceDirectories>
+  <Asset Name="OreHelperRuntime" Path="assets/orehelper/1.0.5/ZeosOreHelper.Runtime.dll" Sha256="b974a1ba23ae580280def9a41291276b12cc1612ecb1e7b664fc89b8eeb47521" Reference="true" />
+  <Asset Name="ZeosOreOverlayPackage" Path="assets/orehelper/1.0.5/ZeosOreOverlay.zip" Sha256="934642f3e3fd5c200f6daa33e78dddef670abe3488dbf1d4481b45efdd2e18a9" Extract="true" />
 </PluginData>

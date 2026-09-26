@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Nav</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.3 — GPS navigation with edge resizing and responsive HUD text.</Tooltip>
-  <Description>GPS navigation, searchable destination picker, SDX main-drive catalog, speed control, flip-and-burn guidance and precision attitude controls. Resize the navigation HUD from its edges and corners; text follows panel height. Preserves flight settings and automatic overlay shutdown. Windows / Pulsar Legacy.</Description>
+  <Tooltip>1.1.15 — Ship navigation, signal intercept, velocity matching and docking.</Tooltip>
+  <Description>Ship navigation, signal intercept, velocity matching and docking. Native press-to-set menu controls and matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local entries for this plugin before enabling this catalog entry.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>0db8babe4d24432bd72b6127721afc583db0342a</Commit>
+  <Commit>30c14fc5e31b3a41c37831d998c2f9f54d060d6c</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoNav/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.0.3/ZeoNav.Runtime.dll" Sha256="dbf35469c885344a8a7fc9141b04d82edc3f2de5bf563e8e15480c30cb0cb498" Reference="true" />
-  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.0.3/ZeoNavOverlay.zip" Sha256="43c3062b1fc57607a1b7156bc7cc18c62c2401f8841485001c530ac977d57ab3" Extract="true" />
+  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.1.15/ZeoNav.dll" Sha256="5ef8c624adac9537f63b7ff060b8e2dffb71d5c65e4b00c993bf18b3b19e0ae7" Reference="true" />
+  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.1.15/ZeoNavOverlay.zip" Sha256="bcaaab3369b6cb24493a66e58ab5ab988c145940b8ad7ac34be91345e6b31707" Extract="true" />
 </PluginData>

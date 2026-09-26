@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<PluginData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
+  <Id>logn0401-design/ZeoPluginHub.ZeoPDC</Id>
+  <RepoId>logn0401-design/ZeoPluginHub</RepoId>
+  <FriendlyName>Zeo PDC Manager</FriendlyName>
+  <Author>Zeo-Corps</Author>
+  <Tooltip>0.3.31 — WeaponCore point-defense management, threat monitoring and combat diagnostics.</Tooltip>
+  <Description>WeaponCore point-defense management, threat monitoring and combat diagnostics. Native press-to-set menu controls and matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local entries for this plugin before enabling this catalog entry.</Description>
+  <Runtimes>CLR</Runtimes>
+  <Platforms>Windows</Platforms>
+  <Commit>30c14fc5e31b3a41c37831d998c2f9f54d060d6c</Commit>
+  <SourceDirectories>
+    <Directory>loader/ZeoPDC/</Directory>
+  </SourceDirectories>
+  <Asset Name="ZeoPdcRuntime" Path="assets/zeopdc/0.3.31/ZeoPDC.dll" Sha256="e0e4ee9237759b6e50e9a79be959e95f680b2c0e776bd8037d9ea9057f0aead3" Reference="true" />
+  <Asset Name="ZeoPdcOverlayPackage" Path="assets/zeopdc/0.3.31/ZeoPdcOverlay.zip" Sha256="eded8c881daec972c124554d332f760c6573b90a1b2472af66520219fcff8050" Extract="true" />
+</PluginData>

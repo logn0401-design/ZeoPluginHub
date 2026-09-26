@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Core</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.0.7 — Docked refill: compatible weapons, native fuel, gas tanks and cargo unloading.</Tooltip>
-  <Description>Tactical HUD, Spectrum-aligned signals, shared contacts, hidden distress GPS and combat telemetry. Dedicated REFILL tab: click-to-bind shortcut, compatible weapon loading, native SDX2 fusion pellets, oxygen/fuel gas tank refill, optional cargo unloading, and reinforced cargo priority for ammunition reserves. Includes responsive HUD resizing and automatic overlay shutdown. Windows / Pulsar Legacy.</Description>
+  <Tooltip>1.0.8 — Tactical HUD, shared signals, distress and docked refill.</Tooltip>
+  <Description>Tactical HUD, shared signals, distress and docked refill. Native press-to-set menu controls and matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local entries for this plugin before enabling this catalog entry.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>eed132eb0ad9700f4d1a9ffce1e898a6c07581f9</Commit>
+  <Commit>30c14fc5e31b3a41c37831d998c2f9f54d060d6c</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoCore/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.7/ZeoCore.Runtime.dll" Sha256="877cc96b4977f2e0a8b0c9e36cd718d4f37e3a6733ade2e6656702137ea20183" Reference="true" />
-  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.7/ZeoOverlay.zip" Sha256="65e036bbfb1b5a52f2196067fb07645bc2cdd36e8bc3e96a2d849a23e50a5c37" Extract="true" />
+  <Asset Name="ZeoCoreRuntime" Path="assets/zeocore/1.0.8/ZeoCore.Runtime.dll" Sha256="600b611cc5e9e2334b3b86e3622bba0cb04d42fc4e4db491b59d15031cda365d" Reference="true" />
+  <Asset Name="ZeoOverlayPackage" Path="assets/zeocore/1.0.8/ZeoOverlay.zip" Sha256="2cabd02d2d5ea7b08f40a0f2b14f9cf41159443ba3d1bb9a99821a714936a7d2" Extract="true" />
 </PluginData>
