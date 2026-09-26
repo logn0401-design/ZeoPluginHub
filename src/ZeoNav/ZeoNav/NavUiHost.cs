@@ -15,6 +15,8 @@ namespace ZeoNav
         public Action Legacy, EnsureOverlay;
         public Action<string> Log;
         public GpsDto Selected;
+        internal DockingController Docking;
+        internal NavRefuel Refuel;
         public NavLayoutDraft Layout;
         public NavLayoutBounds Bounds;
         public DateTime BoundsUtc;

@@ -96,11 +96,17 @@ namespace ZeoCore
             return new Uri(uri.GetLeftPart(UriPartial.Authority));
         }
 
-        // OPEN TEST 0.6.1: gameplay transport does not use a device secret.
-        // Kept only as a compatibility method for old source paths; never used for authorization.
+        // Used only by explicitly enabled authenticated features; legacy open transport is unchanged.
         internal string GetDeviceKey()
         {
-            return "";
+            lock(SaveLock){
+                if(!string.IsNullOrEmpty(ProtectedDeviceKey))
+                    return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(ProtectedDeviceKey),DeviceEntropy,DataProtectionScope.CurrentUser));
+                var bytes=new byte[32];using(var rng=System.Security.Cryptography.RandomNumberGenerator.Create())rng.GetBytes(bytes);
+                string key=Convert.ToBase64String(bytes);
+                ProtectedDeviceKey=Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(key),DeviceEntropy,DataProtectionScope.CurrentUser));
+                Save(this);return key;
+            }
         }
 
         internal Uri GetDeviceNetworkEndpoint()

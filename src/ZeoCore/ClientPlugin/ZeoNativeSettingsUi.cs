@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -14,8 +15,14 @@ namespace ZeoCore
     {
         private static ZeoNativeSettingsScreen _screen;
         private static ZeoHudLayoutScreen _editor;
+        internal static void RecordTiming(string operation,long start)
+        {
+            double elapsed=(Stopwatch.GetTimestamp()-start)*1000.0/Stopwatch.Frequency;
+            Plugin.Log("PERF MENU "+operation+" wall-ms="+elapsed.ToString("0.000",CultureInfo.InvariantCulture));
+        }
         internal static bool Toggle(HudSettings settings, Action openExternalFallback, Action settingsChanged, Action ensureOverlay)
         {
+            long start=Stopwatch.GetTimestamp();
             try
             {
                 if(_editor!=null && _editor.State!=MyGuiScreenState.CLOSED) { _editor.CloseScreen(); return true; }
@@ -37,6 +44,7 @@ namespace ZeoCore
                 Plugin.Log("Native SE settings screen ERROR: " + ex);
                 return false;
             }
+            finally { RecordTiming("toggle",start); }
         }
         internal static void BeginLayout(Action changed,Action ensureOverlay)
         {
@@ -71,6 +79,12 @@ namespace ZeoCore
         private MyGuiControlLabel _refillStatus;
         private readonly List<Action> _bindingPolls=new List<Action>();
         private ZeoNativeColorScreen _colorScreen;
+        private ZeoSignalLegendScreen _legendScreen;
+        private ZeoHelpScreen _helpScreen;
+        private long _closeStarted;
+        private bool _editingBinding;
+        internal bool IsEditingTextOrBinding => FocusedControl is MyGuiControlTextbox || _editingBinding;
+        private ZeoMenuBindingScreen _menuBindingScreen;
 
         internal ZeoNativeSettingsScreen(HudSettings settings, Action openExternal, Action changed, Action ensureOverlay)
             : base(new Vector2(0.5f,0.5f),new Vector4(0.105f,0.145f,0.165f,0.97f),new Vector2(0.94f,0.91f),true)
@@ -80,7 +94,9 @@ namespace ZeoCore
             _page=Math.Max(0,Math.Min(ZeoNativeCatalog.Pages.Length-1,LastPage < 0 ? (int)settings.MenuPage : LastPage));
             DrawMouseCursor=true; CloseButtonEnabled=true; EnabledBackgroundFade=true;
             CanHideOthers=false; CanBeHidden=false;
-            BuildControls();
+            // Model construction already read both settings files. Subsequent page
+            // rebuilds still reload so external edits are preserved.
+            BuildControls(false);
         }
         public override string GetFriendlyName() { return "ZeoCoreNativeSettings"; }
         public override bool Update(bool hasFocus)
@@ -94,28 +110,41 @@ namespace ZeoCore
         }
         public override bool CloseScreen(bool isUnloading=false)
         {
+            long start=Stopwatch.GetTimestamp();
+            try
+            {
+            if(_menuBindingScreen!=null&&_menuBindingScreen.State!=MyGuiScreenState.CLOSED){_menuBindingScreen.CloseScreen(isUnloading);if(!isUnloading)return false;}
+            if(_helpScreen!=null&&_helpScreen.State!=MyGuiScreenState.CLOSED){_helpScreen.CloseScreen(isUnloading);if(!isUnloading)return false;}
+            if(_legendScreen!=null&&_legendScreen.State!=MyGuiScreenState.CLOSED){_legendScreen.CloseScreen(isUnloading);if(!isUnloading)return false;}
             if (_colorScreen != null && _colorScreen.State != MyGuiScreenState.CLOSED)
             {
                 _colorScreen.CloseScreen(isUnloading);
                 if (!isUnloading) return false;
             }
             if (!isUnloading && !CommitEditors()) return false;
-            return base.CloseScreen(isUnloading);
+            bool closed=base.CloseScreen(isUnloading);
+            if(closed && _closeStarted==0)_closeStarted=start;
+            return closed;
+            }
+            finally { ZeoNativeSettingsUi.RecordTiming("close-work",start); }
         }
         protected override void OnClosed()
         {
             // All edits already use the shared model. Never overwrite them with a
             // stale HudSettings snapshot when switching to the legacy window.
             Plugin.Log("Native SE settings screen closed.");
+            if(_closeStarted!=0)ZeoNativeSettingsUi.RecordTiming("close-transition",_closeStarted);
             base.OnClosed();
         }
-        private void BuildControls()
+        private void BuildControls(bool reload=true)
         {
+            long start=Stopwatch.GetTimestamp();
             _building=true;
             try
             {
-                Controls.Clear(); _editors.Clear(); _bindingPolls.Clear(); _model.Reload(); _refillStatus=null;
+                Controls.Clear(); _editors.Clear(); _bindingPolls.Clear(); _editingBinding=false; if(reload)_model.Reload(); _refillStatus=null;
                 AddCaption("ZEOCORE // TACTICAL SYSTEMS",new Vector4(0.82f,0.91f,0.94f,1f),new Vector2(0f,-0.417f),0.88f);
+                Button(.386f,-.417f,.043f,.043f,"?",OpenHelp,.72f).SetToolTip("Help for this tab, quick start and searchable settings guide.");
                 for (int i=0;i<ZeoNativeCatalog.Pages.Length;i++)
                 {
                     int target=i;
@@ -128,7 +157,12 @@ namespace ZeoCore
                 Label(-0.421f,-0.230f,"PROFILE",0.60f);
                 Choice(ZeoNativeCatalog.Profile,-0.170f,-0.230f,0.265f);
                 Label(0.050f,-0.230f,"MENU KEY",0.60f);
-                Choice(ZeoNativeCatalog.MenuKey,0.302f,-0.230f,0.230f);
+                int menuCode=ZeoOverlay.MenuBinding.Resolve(_model.Current.MenuKey,_model.Current.MenuKeyCode);
+                Button(.302f,-.230f,.230f,.041f,menuCode==0?"NONE / ASSIGN":((VRage.Input.MyKeys)menuCode).ToString().ToUpperInvariant(),()=>{
+                    if(!CommitEditors() || ZeoMenuBindingScreen.IsOpen)return;
+                    _menuBindingScreen=new ZeoMenuBindingScreen(_model,()=>{_rebuild=true;});
+                    MyGuiSandbox.AddScreen(_menuBindingScreen);
+                },.52f).SetToolTip("Click, press a key, then APPLY. Escape cancels without changing your shortcut.");
                 var rows=ZeoNativeCatalog.Options.Where(o => o.Page==ZeoNativeCatalog.Pages[_page]).ToArray();
                 int views=(rows.Length+RowsPerView-1)/RowsPerView;
                 int view=LastViews[_page]=Math.Max(0,Math.Min(views-1,LastViews[_page]));
@@ -143,6 +177,12 @@ namespace ZeoCore
                         if(!CommitEditors()) return;
                         if(CloseScreen()) ZeoNativeSettingsUi.BeginLayout(_changed,_ensureOverlay);
                     },0.62f);
+                if(ZeoNativeCatalog.Pages[_page]=="MARKERS")
+                    Button(0,0.327f,0.390f,0.043f,"SIGNAL LEGEND",delegate {
+                        if(CommitEditors()){_legendScreen=new ZeoSignalLegendScreen(_model.Current);MyGuiSandbox.AddScreen(_legendScreen);}
+                    },0.62f);
+                if(ZeoNativeCatalog.Pages[_page]=="FLEET")
+                    Button(0,0.327f,0.390f,0.043f,"TARGET LINK STATUS / CLEAR",()=>Plugin.TargetMarkAction(),0.57f);
                 if(ZeoNativeCatalog.Pages[_page]=="REFILL")
                     Button(0,0.327f,0.390f,0.043f,"QUICK REFILL / CANCEL",delegate {
                         if(!CommitEditors())return;
@@ -154,17 +194,18 @@ namespace ZeoCore
                 Button(-0.285f,0.425f,0.280f,0.044f,"FULL / LEGACY SETTINGS",OpenExternal,0.61f);
                 Button(0.335f,0.425f,0.170f,0.044f,"CLOSE",delegate { CloseScreen(); },0.65f);
             }
-            finally { _building=false; }
+            finally { _building=false; ZeoNativeSettingsUi.RecordTiming("build-controls",start); }
         }
         private string HintForPage()
         {
             string page=ZeoNativeCatalog.Pages[_page];
-            if(page=="FLEET") return "NETWORK / SHARING: local sensors stay active; shared data depends on the server.";
+            if(page=="FLEET") return "Attack marks: bind a key, aim at a signal. Press again to clear. Link status shows the Members pairing code.";
             if(page=="CAPTURE" || page=="PRIVACY") return "Capture exclusion covers the external HUD and legacy menu. This native menu is visible in capture.";
             if(page=="THEME") return "PICK opens native RGB controls. Menu colors style the legacy window; this menu keeps SE styling.";
-            if(page=="LAYOUT") return "Drag edges to resize: width adjusts columns; height adjusts rows and text. Font preferences are preserved.";
+            if(page=="LAYOUT") return "Drag edges to resize frames. Per-panel text grows inside available cells; preferred size is preserved.";
+            if(page=="MARKERS") return "Actual pixel size at preview distance. MAX limits size; raise it for larger markers. IDs use the menu font.";
             if(page=="SCOPE") return "Spectrum / Auto follows the native signal. Motion prediction controls other sensor tracks.";
-            if(page=="REFILL") return "WANT > 0 keeps that ammo type. Unload: cargo only; [ZEO KEEP] containers are protected. Zero WANT unloads that type.";
+            if(page=="REFILL") return "WANT > 0 keeps that ammo type. Unload scans every ship block inventory; [ZEO KEEP] is protected. Zero WANT unloads that type.";
             if(page=="AMMO") return "Ammo HUD display options. Set loading targets and start docked service on REFILL.";
             return "Hover a setting for details. ESC or the configured menu key returns to the game.";
         }
@@ -172,6 +213,19 @@ namespace ZeoCore
         {
             if(!CommitEditors()) return;
             LastViews[_page]+=delta; _rebuild=true;
+        }
+        private void OpenHelp()
+        {
+            if(!CommitEditors())return;
+            if(ZeoMenuBindingScreen.IsOpen)return;
+            if(_helpScreen!=null&&_helpScreen.State!=MyGuiScreenState.CLOSED)return;
+            var help=new ZeoHelpScreen(ZeoNativeCatalog.Pages[_page],topic=>{
+                int target=Array.IndexOf(ZeoNativeCatalog.Pages,topic.Page);if(target<0)return;
+                _page=target;LastPage=target;LastViews[target]=ZeoHelpCatalog.ViewFor(topic,RowsPerView);_rebuild=true;
+                _message="Help: "+topic.Title+". No settings changed by navigation.";
+            });
+            help.Closed+=delegate{if(ReferenceEquals(_helpScreen,help))_helpScreen=null;};
+            _helpScreen=help;MyGuiSandbox.AddScreen(help);
         }
         private bool CommitEditors()
         {
@@ -192,18 +246,19 @@ namespace ZeoCore
         }
         private void AddRow(NativeOption option,float y)
         {
-            var label=Label(-0.421f,y-0.004f,Short(option.Label,53),0.62f);
+            var label=Label(-0.421f,y-0.004f,Short(option.Label,option.Page=="MARKERS"&&ZeoSignalPreview.Supports(option.Key)?36:53),0.62f);
             label.SetToolTip(option.Section+"\n"+option.Label+Help(option));
             Label(-0.421f,y+0.015f,option.Section,0.40f);
-            if(option.Key=="QuickRefillKey")
+            if(option.Key=="QuickRefillKey"||option.Key=="TargetMarkKey")
             {
-                int key=_model.Current.QuickRefillKey,mod=_model.Current.QuickRefillModifier;bool listening=false;
+                bool targetBinding=option.Key=="TargetMarkKey";
+                int key=targetBinding?_model.Current.TargetMarkKey:_model.Current.QuickRefillKey,mod=targetBinding?_model.Current.TargetMarkModifier:_model.Current.QuickRefillModifier;bool listening=false;
                 MyGuiControlButton capture=null;
                 Action refresh=()=>capture.Text=listening?"PRESS KEY...":(key==0?"UNBOUND":(mod==0?"":ZeoOverlay.QuickRefillBinding.Modifiers[mod]+" + ")+ZeoOverlay.QuickRefillBinding.Labels[ZeoOverlay.QuickRefillBinding.Index(key)]);
-                capture=Button(.190f,y,.200f,.041f,"",()=>{listening=true;refresh();Message("Press a key combination, then APPLY. ESC / leaving this page discards the draft.");},.48f);
+                capture=Button(.190f,y,.200f,.041f,"",()=>{listening=true;_editingBinding=true;FocusedControl=null;refresh();Message("Press a key combination, then APPLY. ESC / leaving this page discards the draft.");},.48f);
                 refresh();
-                Button(.325f,y,.063f,.041f,"CLEAR",()=>{key=0;mod=0;listening=false;refresh();},.43f);
-                Button(.395f,y,.063f,.041f,"APPLY",()=>{try{_model.SaveRefillBinding(key,mod);listening=false;refresh();Message("Refill binding saved.");_rebuild=true;}catch(Exception ex){Message(ex.Message);}},.43f);
+                Button(.325f,y,.063f,.041f,"CLEAR",()=>{key=0;mod=0;listening=false;_editingBinding=true;refresh();},.43f);
+                Button(.395f,y,.063f,.041f,"APPLY",()=>{try{if(listening){Message("Press a key before APPLY.");return;}if(targetBinding)_model.SaveTargetBinding(key,mod);else _model.SaveRefillBinding(key,mod);listening=false;_editingBinding=false;refresh();Message("Binding saved.");_rebuild=true;}catch(Exception ex){Message(ex.Message);}},.43f);
                 _bindingPolls.Add(()=>{
                     var input=Sandbox.ModAPI.MyAPIGateway.Input;if(!listening||input==null)return;
                     foreach(int candidate in ZeoOverlay.QuickRefillBinding.Keys){
@@ -261,6 +316,11 @@ namespace ZeoCore
             edit.Size=new Vector2(color ? 0.155f : 0.140f,0.040f);
             edit.SetToolTip(option.Label+Help(option)+"\nENTER or APPLY saves. Page changes also save valid edits.");
             Controls.Add(edit);
+            ZeoSignalPreview preview=null;
+            if(option.Page=="MARKERS"&&ZeoSignalPreview.Supports(option.Key)){
+                preview=new ZeoSignalPreview(new Vector2(.035f,y),option.Key,_model.Current);Controls.Add(preview);
+                edit.TextChanged+=delegate {double v;if(double.TryParse(edit.Text,NumberStyles.Float,CultureInfo.InvariantCulture,out v)&&!double.IsNaN(v)&&!double.IsInfinity(v))preview.Refresh(Math.Max(option.Min,Math.Min(option.Max,v)));};
+            }
             Func<bool> commit=delegate {
                 if(edit.Text==saved) return true;
                 try
@@ -268,6 +328,7 @@ namespace ZeoCore
                     object value=option.Parse(edit.Text);
                     if(!Apply(option,value)) return false;
                     saved=option.Format(_model.Current); edit.Text=saved;
+                    if(option.Key=="MarkerPreviewDistanceKm"||option.Key=="MaxMarkerScale")_rebuild=true;
                     return true;
                 }
                 catch(Exception ex) { Message(option.Label+": "+ex.Message); FocusedControl=edit; return false; }

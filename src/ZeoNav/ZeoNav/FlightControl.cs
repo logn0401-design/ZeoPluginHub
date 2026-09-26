@@ -28,7 +28,28 @@ namespace ZeoNav
         private readonly double[] force = new double[6];
         private readonly NavOsJitAim aim;
         private readonly PrecisionAim precisionAim = new PrecisionAim();
-        private bool wasPrecision;
+        internal bool AllowRcsTurnAssist;
+        private bool wasPrecision, bankTurn;
+        internal double TurnAllowanceSeconds=180;
+        private double observedTurnRate;
+        private void ReleaseTurnBank(Sandbox.ModAPI.IMyGyro keep)
+        {if(!bankTurn)return;foreach(var g in Gyros)if(g!=keep&&!g.Closed){g.Pitch=g.Yaw=g.Roll=0;g.GyroOverride=false;}foreach(var g in rcsGyros)if(!g.Closed){g.Pitch=g.Yaw=g.Roll=0;g.GyroOverride=false;SetGyroEnabledRemember(g,false);}
+            bankTurn=false;}
+        private void CommandTurnBank(Vector3D worldRate)
+        {
+            bankTurn=true;
+            foreach(var g in Gyros.Concat(AllowRcsTurnAssist?rcsGyros.Where(r=>r.BlockDefinition.SubtypeName=="sdg_rcsGyroComputer"):Enumerable.Empty<Sandbox.ModAPI.IMyGyro>()))
+            {
+                if(g.Closed||!g.IsFunctional)continue;
+                if(rcsGyros.Any(r=>object.ReferenceEquals(r,g)))SetGyroEnabledRemember(g,true);
+                if(!g.Enabled)continue;
+                controlledGyroRefs[g.EntityId]=g;RememberGyroCommandState(g);
+                var command=PrecisionAim.GyroCommand(worldRate,g.WorldMatrix);
+                g.Pitch=(float)command.X;g.Yaw=(float)command.Y;g.Roll=(float)command.Z;
+                if(!g.GyroOverride)g.GyroOverride=true;
+            }
+        }
+
         public string AimMode { get; private set; } = "NAVOS-1";
         private Sandbox.ModAPI.IMyGyro activeGyro;
         private int activeGyroCursor;
@@ -40,6 +61,11 @@ namespace ZeoNav
         private readonly ThrustCommandCache sentThrust = new ThrustCommandCache();
         internal Dictionary<MoveDir, List<Sandbox.ModAPI.IMyThrust>> ThrusterBanks { get { return thrusters; } }
         internal SignalBudget SignatureBudget;
+        internal bool RcsOnly;
+        internal static bool IsRcs(Sandbox.ModAPI.IMyThrust t)
+        { return t != null && DriveClassifier.IsRcs(t.BlockDefinition.ToString(), t.DefinitionDisplayNameText, t.MaxThrust); }
+        internal double RcsForce(MoveDir d)
+        { return thrusters[d].Where(t => t != null && !t.Closed && t.IsWorking && IsRcs(t)).Sum(t => (double)t.MaxEffectiveThrust); }
         internal readonly double[] AppliedCommands = new double[6];
         public int TopologyRevision { get; private set; }
         private string signatureTopology = "";
@@ -95,7 +121,23 @@ namespace ZeoNav
 
         public string Name { get { try { return Grid.DisplayName ?? "Controlled Ship"; } catch { return "Controlled Ship"; } } }
         public Vector3D Position { get { try { return Controller.WorldAABB.Center; } catch { return Controller.GetPosition(); } } }
-        public Vector3D Velocity { get { try { return Controller.GetShipVelocities().LinearVelocity; } catch { return Vector3D.Zero; } } }
+        internal readonly WorldMotion Motion=new WorldMotion();
+        private int loggedMotionFault;
+        internal void UpdateMotion(FlightVelocityApi velocityApi=null)
+        {
+            try
+            {
+                double mass=Mass,bound=Gravity.Length();for(int i=0;i<6;i++)bound+=force[i]/mass;
+                Vector3D modVelocity;
+                if(velocityApi!=null&&velocityApi.TryRead(Grid,out modVelocity))Motion.ObserveMod(Controller.CenterOfMass,Controller.GetShipVelocities().LinearVelocity,modVelocity,MyAPIGateway.Session.GameplayFrameCounter/60d,bound);
+                else Motion.Observe(Controller.CenterOfMass,Controller.GetShipVelocities().LinearVelocity,
+                    MyAPIGateway.Session.GameplayFrameCounter/60d,bound);
+                if(Motion.FaultGeneration!=loggedMotionFault){loggedMotionFault=Motion.FaultGeneration;log("MOTION SAMPLE REJECTED // "+Motion.Source+" // "+Motion.LastFault);}
+            }
+            catch{Motion.Reset();}
+        }
+        public Vector3D Velocity { get { return Motion.Ready?Motion.Velocity:RawVelocity; } }
+        private Vector3D RawVelocity {get{try{return Controller.GetShipVelocities().LinearVelocity;}catch{return Vector3D.Zero;}}}
         public Vector3D Gravity { get { try { return Controller.GetNaturalGravity(); } catch { return Vector3D.Zero; } } }
         public double Mass { get { try { return Math.Max(1, Controller.CalculateShipMass().PhysicalMass); } catch { return 1; } } }
         public int ThrusterCount { get { int n = 0; foreach (var x in thrusters.Values) n += x.Count; return n; } }
@@ -132,7 +174,7 @@ namespace ZeoNav
                     " fCmd=" + (ForwardCommandRatio * 100.0).ToString("0.0") + "%" +
                     " fRb=" + (ForwardReadbackRatio * 100.0).ToString("0.0") + "%" +
                     " gyro=" + TotalGyroCount +
-                    " navGyro=" + (activeGyro == null ? "0/" : "1/") + Gyros.Count +
+                    " navGyro=" + Gyros.Count(g=>!g.Closed&&g.GyroOverride) + "/" + Gyros.Count +
                     " gyroMode=" + AimMode +
                     " otherOverrides=" + Gyros.Count(g => g != activeGyro && !g.Closed && g.GyroOverride) +
                     " subGyro=" + SubgridGyroCount +
@@ -147,6 +189,15 @@ namespace ZeoNav
             }
         }
 
+        internal bool HasDockConnection()
+        {
+            foreach(var grid in GetMechanicalConstructGrids())
+            {
+                var blocks=new List<IMySlimBlock>();grid.GetBlocks(blocks);
+                if(blocks.Any(b=>(b.FatBlock as Sandbox.ModAPI.IMyShipConnector)?.Status==Sandbox.ModAPI.Ingame.MyShipConnectorStatus.Connected))return true;
+            }
+            return false;
+        }
         public void Scan()
         {
             var previousGyro = activeGyro;
@@ -266,7 +317,7 @@ namespace ZeoNav
             try { log("SHIP SCAN // " + ForceSummary); } catch { }
         }
 
-        private List<IMyCubeGrid> GetMechanicalConstructGrids()
+        internal List<IMyCubeGrid> GetMechanicalConstructGrids()
         {
             var result = new List<IMyCubeGrid>();
             AddGridUnique(result, Grid);
@@ -330,6 +381,14 @@ namespace ZeoNav
             }
             catch { }
 
+            return NormalizeConstructGrids(result);
+        }
+
+        internal static List<IMyCubeGrid> NormalizeConstructGrids(IEnumerable<IMyCubeGrid> grids)
+        {
+            // GetGroup(grid, kind, list) may append the root already seeded above.
+            var seen=new HashSet<long>();var result=new List<IMyCubeGrid>();
+            foreach(var grid in grids)if(grid!=null&&!grid.Closed&&seen.Add(grid.EntityId))result.Add(grid);
             return result;
         }
 
@@ -395,7 +454,7 @@ namespace ZeoNav
             double sum = 0, weight = 0;
             foreach (var thrust in thrusters[d])
             {
-                if (thrust == null || thrust.Closed || !thrust.IsWorking) continue;
+                if (thrust == null || thrust.Closed || !thrust.IsWorking || (RcsOnly && !IsRcs(thrust))) continue;
                 try
                 {
                     double forceWeight = Math.Max(0, thrust.MaxEffectiveThrust);
@@ -457,7 +516,7 @@ namespace ZeoNav
             for (int i = Gyros.Count - 1; i >= 0; i--) if (Gyros[i] == null || Gyros[i].Closed || !Gyros[i].IsFunctional) Gyros.RemoveAt(i);
         }
 
-        public double Force(MoveDir d) { return force[(int)d]; }
+        public double Force(MoveDir d) { return RcsOnly ? RcsForce(d) : force[(int)d]; }
         public double Accel(MoveDir d, double ratio) { return Force(d) * Math.Max(0, Math.Min(1, ratio)) / Mass; }
 
         public void SaveDampenersOnce()
@@ -499,7 +558,7 @@ namespace ZeoNav
             if (!thrustControlActive) return;
             stagingThrust = false;
             sentThrust.Reset();
-            SignatureBudget = null;
+            SignatureBudget = null; RcsOnly = false;
             Array.Clear(AppliedCommands, 0, AppliedCommands.Length);
 
             // Clear every currently discovered Zeo-controlled thruster first.
@@ -562,10 +621,11 @@ namespace ZeoNav
                 if (thrust == null || thrust.Closed) continue;
                 try
                 {
+                    float output = RcsOnly && !IsRcs(thrust) ? 0 : p;
                     float readback = thrust.ThrustOverridePercentage;
-                    bool reduction = p <= sentThrust.PreviousRatio(thrust.EntityId, readback);
+                    bool reduction = output <= sentThrust.PreviousRatio(thrust.EntityId, readback);
                     if (pass >= 0 && (pass == 0) != reduction) continue;
-                    if (sentThrust.ShouldSend(thrust.EntityId, p, readback, now)) thrust.ThrustOverridePercentage = p;
+                    if (sentThrust.ShouldSend(thrust.EntityId, output, readback, now)) thrust.ThrustOverridePercentage = output;
                 }
                 catch { sentThrust.Forget(thrust.EntityId); }
             }
@@ -623,7 +683,7 @@ namespace ZeoNav
         {
             if (g == null || g.Closed) return;
             RememberGyroEnabled(g);
-            try { g.Enabled = enabled; } catch { }
+            try { if (g.Enabled != enabled) g.Enabled = enabled; } catch { }
         }
 
         public void BeginGyroControl()
@@ -642,7 +702,7 @@ namespace ZeoNav
 
         private Sandbox.ModAPI.IMyGyro EnsureActiveGyro()
         {
-            if (activeGyro != null && !activeGyro.Closed && activeGyro.IsFunctional && Gyros.Contains(activeGyro))
+            if (activeGyro != null && !activeGyro.Closed && activeGyro.IsFunctional && Gyros.Any(r=>object.ReferenceEquals(r,activeGyro)))
             {
                 controlledGyroRefs[activeGyro.EntityId] = activeGyro;
                 RememberGyroCommandState(activeGyro);
@@ -690,15 +750,16 @@ namespace ZeoNav
             {
                 Sandbox.ModAPI.IMyGyro g = rcsGyros[i];
                 if (g == null || g.Closed || !g.IsFunctional) continue;
+                if(AllowRcsTurnAssist&&bankTurn&&g.BlockDefinition.SubtypeName=="sdg_rcsGyroComputer")continue;
                 controlledGyroRefs[g.EntityId] = g;
                 RememberGyroCommandState(g);
                 SetGyroEnabledRemember(g, false);
                 try
                 {
-                    g.Pitch = 0;
-                    g.Yaw = 0;
-                    g.Roll = 0;
-                    g.GyroOverride = false;
+                    if (g.Pitch != 0) g.Pitch = 0;
+                    if (g.Yaw != 0) g.Yaw = 0;
+                    if (g.Roll != 0) g.Roll = 0;
+                    if (g.GyroOverride) g.GyroOverride = false;
                 }
                 catch { }
             }
@@ -706,10 +767,10 @@ namespace ZeoNav
 
         public void ReleaseGyros()
         {
+            bankTurn=false;AllowRcsTurnAssist=false;
             aim.Reset();
 
-            // Restore the exact pre-nav gyro command state for every gyro Zeo Nav touched.
-            // Standard gyros were commanded; RCS Control Computers were neutralized/disabled.
+            // Restore command state, then return touched RCS computers to enabled pilot control.
             foreach (var kv in controlledGyroRefs)
             {
                 Sandbox.ModAPI.IMyGyro g = kv.Value;
@@ -737,7 +798,7 @@ namespace ZeoNav
                 if (g == null || g.Closed) continue;
                 bool value;
                 if (!savedGyroEnabled.TryGetValue(kv.Key, out value)) continue;
-                try { g.Enabled = value; } catch { }
+                try { g.Enabled = LooksLikeRcsGyro(g) || value; } catch { }
             }
 
             savedGyroEnabled.Clear();
@@ -808,6 +869,15 @@ namespace ZeoNav
             return Math.Acos(dot) * 180.0 / Math.PI;
         }
 
+        public void ApplyDockRotation(Vector3D worldRate)
+        {
+            if(!gyroControlActive)BeginGyroControl();
+            var g=EnsureActiveGyro();if(g==null)throw new InvalidOperationException("No navigation gyro available.");
+            ReleaseTurnBank(g);
+            var command=PrecisionAim.GyroCommand(worldRate,g.WorldMatrix);
+            g.Pitch=(float)command.X;g.Yaw=(float)command.Y;g.Roll=(float)command.Z;g.GyroOverride=true;AimMode="DOCK-POSE";
+        }
+
         public bool Orient(Vector3D desiredForward, double toleranceDeg)
         {
             if (Gyros.Count == 0 || desiredForward.LengthSquared() < 1e-8) return false;
@@ -824,6 +894,25 @@ namespace ZeoNav
             try { angularVelocity=Controller.GetShipVelocities().AngularVelocity; LastAngularRateDeg=angularVelocity.Length()*180/Math.PI; }
             catch { LastAngularRateDeg=0; velocityKnown=false; }
             Vector3D worldRate=Vector3D.Zero;
+            if(velocityKnown&&angle>5)
+            {
+                Vector3D forward=Controller.WorldMatrix.Forward;
+                var axis=Vector3D.Cross(forward,desiredForward);
+                if(axis.LengthSquared()<1e-8)axis=Controller.WorldMatrix.Up;else axis.Normalize();
+                double radians=angle*Math.PI/180;
+                double rate=Math.Min(.35,Math.Sqrt(2*.08*radians));
+                worldRate=DockingMath.Limit(axis*Math.Min(rate,radians*1.5)-angularVelocity*.6,.35);
+                CommandTurnBank(worldRate);AimMode=AllowRcsTurnAssist?"TURN-BANK + RCS":"TURN-BANK";wasPrecision=false;
+                // Never shorten the braking reservation from an assisted turn:
+                // Spectrum may remove RCS authority before the later flip.
+                if(!AllowRcsTurnAssist&&angle>30&&LastAngularRateDeg>.2)
+                {
+                    observedTurnRate=observedTurnRate==0?LastAngularRateDeg:observedTurnRate*.98+LastAngularRateDeg*.02;
+                    TurnAllowanceSeconds=Math.Max(20,180/observedTurnRate*1.5+10);
+                }
+                return false;
+            }
+            ReleaseTurnBank(g);
             bool precise=velocityKnown && precisionAim.TryRate(Controller.WorldMatrix.Forward,desiredForward,angularVelocity,out worldRate);
             if(precise)
             {
@@ -1046,4 +1135,3 @@ namespace ZeoNav
     }
 
 }
-

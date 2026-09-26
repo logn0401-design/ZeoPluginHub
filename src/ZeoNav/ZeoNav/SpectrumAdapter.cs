@@ -29,6 +29,13 @@ namespace ZeoNav
         private bool wasReady;
         private string status = "WAIT SPECTRUM SELF FEED";
 
+        internal System.Collections.Generic.List<TargetDetection> ReadContacts()
+        {
+            if(api==null)return new System.Collections.Generic.List<TargetDetection>();
+            try { var bytes=api(); if(bytes==null||bytes.Length==0)return new System.Collections.Generic.List<TargetDetection>();
+                return MyAPIGateway.Utilities.SerializeFromBinary<System.Collections.Generic.List<TargetDetection>>(bytes)??new System.Collections.Generic.List<TargetDetection>(); }
+            catch{return new System.Collections.Generic.List<TargetDetection>();}
+        }
         public bool Ready { get { return session != null && packetHandler != null; } }
         public bool HasSelfSample { get { lock (sync) return tracker.Fresh(clock.Elapsed.TotalSeconds); } }
         public bool DriveKmReady { get { return Ready && HasSelfSample; } }
@@ -178,7 +185,7 @@ namespace ZeoNav
         }
         public void Dispose() { ResetSession(); }
 
-        public SignalBudget BuildBudget(ShipContext ship)
+        public SignalBudget BuildBudget(ShipContext ship, bool rcsOnly = false)
         {
             if (!Ready || ship == null || emitters == null) throw new InvalidOperationException("Spectrum emission definitions unavailable");
             var result = new SignalBudget();
@@ -187,7 +194,7 @@ namespace ZeoNav
             {
                 foreach (IMyThrust t in pair.Value)
                 {
-                    if (t == null || t.Closed || !t.IsWorking) continue;
+                    if (t == null || t.Closed || !t.IsWorking || (rcsOnly && !ShipContext.IsRcs(t))) continue;
                     // HUD self summary only covers the cockpit grid. Include subgrid costs
                     // conservatively too; never substitute another owned ship's reading.
                     string grid = t.CubeGrid.EntityId.ToString();

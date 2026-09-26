@@ -81,6 +81,8 @@ namespace ZeoOverlay
         public bool DistressLocalActive { get; set; }
         public bool DistressServerReady { get; set; }
         public string DistressStatus { get; set; }
+        public string SosNotification { get; set; }
+        public long SosNotificationExpiresMs { get; set; }
         public int ActiveDistressCount { get; set; }
         public int TotalScopeCount { get; set; }
         public List<OverlayMarker> Markers { get; set; } = new List<OverlayMarker>();
@@ -131,6 +133,7 @@ namespace ZeoOverlay
 
     internal sealed class OverlayMarker
     {
+        public bool AttackTarget { get; set; }
         public int TrackId { get; set; }
         public int Source { get; set; }
         public bool Friendly { get; set; }

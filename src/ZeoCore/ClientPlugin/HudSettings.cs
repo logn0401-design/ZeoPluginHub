@@ -15,6 +15,8 @@ namespace ZeoCore
         public int SchemaVersion { get; set; } = 0;
         public HudProfile Profile { get; set; } = HudProfile.ThreatPriority;
         public HudMenuKey MenuKey { get; set; } = HudMenuKey.Home;
+        // Null preserves the existing five-key setting; zero explicitly disables it.
+        public int? MenuKeyCode { get; set; }
         public HudMenuPage MenuPage { get; set; } = HudMenuPage.Scope;
         public HudMarkerStyle MarkerStyle { get; set; } = HudMarkerStyle.ClassicReticle;
         public HudScopeSort ScopeSort { get; set; } = HudScopeSort.Nearest;
@@ -44,6 +46,14 @@ namespace ZeoCore
         public bool RefillAmmo { get; set; } = true;
         public bool RefillTanks { get; set; } = true;
         public bool RefillUnloadOtherCargo { get; set; } = false;
+        public bool TargetMarksEnabled { get; set; }
+        public bool TargetMarksAlliance { get; set; }
+        public bool TargetMarkPulse { get; set; } = true;
+        public int RefillMovesPerPass { get; set; } = 4;
+        public double RefillUnitsPerTransfer { get; set; } = 10000000;
+        public int TargetMarkKey { get; set; }
+        public int TargetMarkModifier { get; set; } = 1;
+        public double MarkerPreviewDistanceKm { get; set; } = 2;
         public int QuickRefillKey { get; set; }
         public int QuickRefillModifier { get; set; } = 1;
         // ZEOCORE_V067H4_AMMO_TYPE_VISIBILITY
@@ -98,6 +108,8 @@ namespace ZeoCore
         public bool ShareWeaponCoreContacts { get; set; } = true;
         public bool ShareSpectrumSignals { get; set; } = true;
         public bool SharedTacticalNoRangeLimit { get; set; } = true;
+        public int MaxSharedTracks { get; set; } = 96;
+        public double MaxSharedTrackDistanceKm { get; set; } = 0;
         public bool ProjectCrossSectorDistress { get; set; } = true;
 
         public bool ShowHostiles { get; set; } = true;
@@ -170,8 +182,18 @@ namespace ZeoCore
         public string HudPanelColor { get; set; } = "#12161A";
         public string HudBorderColor { get; set; } = "#7B858E";
         public string CrosshairColor { get; set; } = "#D3D8DD";
+        public double ShipBoxTextScale { get; set; } = 1;
+        public double ScopeBoxTextScale { get; set; } = 1;
+        public double FleetBoxTextScale { get; set; } = 1;
+        public double AmmoBoxTextScale { get; set; } = 1;
+        public double RosterBoxTextScale { get; set; } = 1;
+        public double DistressBoxTextScale { get; set; } = 1;
+        public int FriendlyMarkerRevision { get; set; } = 0;
+        public double SharedMarkerScale { get; set; } = 1;
+        public double SharedIdScale { get; set; } = 1;
+        public string SharedTrackColor { get; set; } = "#BC9CFF";
         public string SpectrumColor { get; set; } = "#FFB84A";
-        public string FriendlyColor { get; set; } = "#4DE1FF";
+        public string FriendlyColor { get; set; } = "#2EAB33";
         public string HostileColor { get; set; } = "#FF5A5F";
         public string NeutralColor { get; set; } = "#B48CFF";
         public string StaleColor { get; set; } = "#70879A";
@@ -494,19 +516,19 @@ namespace ZeoCore
             {
                 case HudThemePreset.Monochrome:
                     HudTextColor = "#D8D8D8"; HudSecondaryColor = "#A5A5A5"; HudPanelColor = "#272727"; HudBorderColor = "#686868";
-                    CrosshairColor = "#D8D8D8"; SpectrumColor = "#D8D8D8"; FriendlyColor = "#C6C6C6"; HostileColor = "#F0F0F0";
+                    CrosshairColor = "#D8D8D8"; SpectrumColor = "#D8D8D8"; FriendlyColor="#2EAB33"; HostileColor = "#F0F0F0";
                     NeutralColor = "#B8B8B8"; StaleColor = "#777777"; FocusColor = "#FFFFFF";
                     MenuBackgroundColor = "#1F1F1F"; MenuPanelColor = "#292929"; MenuTextColor = "#D8D8D8"; MenuAccentColor = "#A8A8A8";
                     break;
                 case HudThemePreset.Amber:
                     HudTextColor = "#E3D6B0"; HudSecondaryColor = "#B5A77E"; HudPanelColor = "#2D2A24"; HudBorderColor = "#746A50";
-                    CrosshairColor = "#E3D6B0"; SpectrumColor = "#D8BE76"; FriendlyColor = "#A8D0A2"; HostileColor = "#E48168";
+                    CrosshairColor = "#E3D6B0"; SpectrumColor = "#D8BE76"; FriendlyColor="#2EAB33"; HostileColor = "#E48168";
                     NeutralColor = "#D8BE76"; StaleColor = "#817864"; FocusColor = "#F1D88C";
                     MenuBackgroundColor = "#211F1A"; MenuPanelColor = "#2B2923"; MenuTextColor = "#E3D6B0"; MenuAccentColor = "#C1AE75";
                     break;
                 case HudThemePreset.HighContrast:
                     HudTextColor = "#E8ECF1"; HudSecondaryColor = "#B8BEC5"; HudPanelColor = "#101419"; HudBorderColor = "#7B858E";
-                    CrosshairColor = "#D3D8DD"; SpectrumColor = "#FFB84A"; FriendlyColor = "#4DE1FF"; HostileColor = "#FF5A5F";
+                    CrosshairColor = "#D3D8DD"; SpectrumColor = "#FFB84A"; FriendlyColor="#2EAB33"; HostileColor = "#FF5A5F";
                     NeutralColor = "#B48CFF"; StaleColor = "#70879A"; FocusColor = "#FFE16B";
                     MenuBackgroundColor = "#101419"; MenuPanelColor = "#1A2026"; MenuTextColor = "#E8ECF1"; MenuAccentColor = "#F2C94C";
                     break;
@@ -516,14 +538,14 @@ namespace ZeoCore
                     // hostile/distress red is preserved; friendlies stay cool and muted.
                     HudTextColor = "#F1F3F5"; HudSecondaryColor = "#9CA3AB"; HudPanelColor = "#090B0E"; HudBorderColor = "#414850";
                     // ZEOCORE_V13E_WARROOM_SEMANTICS
-                    CrosshairColor = "#E9ECEF"; SpectrumColor = "#FFB84A"; FriendlyColor = "#B8D7E8"; HostileColor = "#F04444";
+                    CrosshairColor = "#E9ECEF"; SpectrumColor = "#FFB84A"; FriendlyColor="#2EAB33"; HostileColor = "#F04444";
                     NeutralColor = "#F1F3F5"; StaleColor = "#5E6670"; FocusColor = "#FFFFFF";
                     MenuBackgroundColor = "#07090B"; MenuPanelColor = "#111419"; MenuTextColor = "#F1F3F5"; MenuAccentColor = "#D52B2B";
                     break;
                 case HudThemePreset.KeenNative:
                     // ZEOCORE_V13B_KEEN_NATIVE_THEME - inspired by Keen/SE terminal + signal HUD language.
                     HudTextColor = "#D9E6EA"; HudSecondaryColor = "#91A6AE"; HudPanelColor = "#26333B"; HudBorderColor = "#607781";
-                    CrosshairColor = "#C9DADF"; SpectrumColor = "#A7C7D0"; FriendlyColor = "#8FCAD7"; HostileColor = "#D86A65";
+                    CrosshairColor = "#C9DADF"; SpectrumColor = "#A7C7D0"; FriendlyColor="#2EAB33"; HostileColor = "#D86A65";
                     NeutralColor = "#AAB9BE"; StaleColor = "#6E8087"; FocusColor = "#DCECF0";
                     MenuBackgroundColor = "#1B2931"; MenuPanelColor = "#263740"; MenuTextColor = "#D9E6EA"; MenuAccentColor = "#91B5C0";
                     break;
@@ -531,7 +553,7 @@ namespace ZeoCore
                     return;
                 default:
                     HudTextColor = "#D7D9DC"; HudSecondaryColor = "#A9ADB2"; HudPanelColor = "#2B2E32"; HudBorderColor = "#666C72";
-                    CrosshairColor = "#D7D9DC"; SpectrumColor = "#D7A04B"; FriendlyColor = "#8FD3B0"; HostileColor = "#E07872";
+                    CrosshairColor = "#D7D9DC"; SpectrumColor = "#D7A04B"; FriendlyColor="#2EAB33"; HostileColor = "#E07872";
                     NeutralColor = "#D0C187"; StaleColor = "#7E858B"; FocusColor = "#E6D28A";
                     MenuBackgroundColor = "#202327"; MenuPanelColor = "#2A2E33"; MenuTextColor = "#D7D9DC"; MenuAccentColor = "#AEB5BC";
                     break;
@@ -571,10 +593,16 @@ namespace ZeoCore
             Normalize();
         }
 
+        private static double SafeBoxText(double v){return double.IsNaN(v)||double.IsInfinity(v)?1:Math.Max(.6,Math.Min(3,v));}
         private void Normalize()
         {
             Profile = (HudProfile)Clamp((int)Profile, 0, 4);
             MenuKey = (HudMenuKey)Clamp((int)MenuKey, 0, 4);
+            RefillMovesPerPass=Math.Max(1,Math.Min(8,RefillMovesPerPass));
+            RefillUnitsPerTransfer=double.IsNaN(RefillUnitsPerTransfer)||double.IsInfinity(RefillUnitsPerTransfer)?10000000:Math.Max(1,Math.Min(10000000,RefillUnitsPerTransfer));
+            TargetMarkKey=ZeoOverlay.QuickRefillBinding.NormalizeKey(TargetMarkKey);
+            TargetMarkModifier=ZeoOverlay.QuickRefillBinding.NormalizeModifier(TargetMarkModifier);
+            MarkerPreviewDistanceKm=double.IsNaN(MarkerPreviewDistanceKm)||double.IsInfinity(MarkerPreviewDistanceKm)?2:Math.Max(0,Math.Min(100,MarkerPreviewDistanceKm));
             QuickRefillKey=ZeoOverlay.QuickRefillBinding.NormalizeKey(QuickRefillKey);
             QuickRefillModifier=ZeoOverlay.QuickRefillBinding.NormalizeModifier(QuickRefillModifier);
             MenuPage = (HudMenuPage)Clamp((int)MenuPage, 0, 10);
@@ -595,6 +623,8 @@ namespace ZeoCore
             ThemePreset = (HudThemePreset)Clamp((int)ThemePreset, 0, 6);
             MaxFriendlyMarkers = Clamp(MaxFriendlyMarkers, 1, 24);
             MaxContactMarkers = Clamp(MaxContactMarkers, 1, 40);
+            MaxSharedTracks=Clamp(MaxSharedTracks,0,192);
+            MaxSharedTrackDistanceKm=double.IsNaN(MaxSharedTrackDistanceKm)||double.IsInfinity(MaxSharedTrackDistanceKm)?0:Clamp(MaxSharedTrackDistanceKm,0,1000000);
             TacticalProcessingCap = Clamp(TacticalProcessingCap, 24, 192);
             ScopeRows = Clamp(ScopeRows, 3, 16);
             RosterRows = Clamp(RosterRows, 1, 24);
@@ -623,7 +653,7 @@ namespace ZeoCore
             HostileMarkerScale = Clamp(HostileMarkerScale, 0.50, 3.00);
             FocusMarkerScale = Clamp(FocusMarkerScale, 0.50, 3.00);
             OffscreenMarkerScale = Clamp(OffscreenMarkerScale, 0.50, 3.00);
-            MaxMarkerScale = Clamp(MaxMarkerScale, 0.50, 1.00);
+            MaxMarkerScale = Clamp(MaxMarkerScale, 0.50, 3.00);
             CrosshairScale = Clamp(CrosshairScale, 0.50, 3.00);
             DeclutterRadius = Clamp(DeclutterRadius, 0.015, 0.12);
             StaleSeconds = Clamp(StaleSeconds, 2, 60);
@@ -644,6 +674,15 @@ namespace ZeoCore
             CrosshairColor = SafeHex(CrosshairColor, "#D3D8DD"); SpectrumColor = SafeHex(SpectrumColor, "#FFB84A");
             FriendlyColor = SafeHex(FriendlyColor, "#4DE1FF"); HostileColor = SafeHex(HostileColor, "#FF5A5F");
             NeutralColor = SafeHex(NeutralColor, "#B48CFF"); StaleColor = SafeHex(StaleColor, "#70879A"); FocusColor = SafeHex(FocusColor, "#FFE16B"); DistressColor = SafeHex(DistressColor, "#FF3B30");
+            SharedTrackColor = SafeHex(SharedTrackColor, "#BC9CFF");
+            if(FriendlyMarkerRevision<1){FriendlyColor="#2EAB33";FriendlyMarkerRevision=1;}
+            ShipBoxTextScale = SafeBoxText(ShipBoxTextScale);
+            ScopeBoxTextScale = SafeBoxText(ScopeBoxTextScale);
+            FleetBoxTextScale = SafeBoxText(FleetBoxTextScale);
+            AmmoBoxTextScale = SafeBoxText(AmmoBoxTextScale);
+            RosterBoxTextScale = SafeBoxText(RosterBoxTextScale);
+            DistressBoxTextScale = SafeBoxText(DistressBoxTextScale);
+            SharedMarkerScale=SafeBoxText(SharedMarkerScale); SharedIdScale=SafeBoxText(SharedIdScale);
             MenuBackgroundColor = SafeHex(MenuBackgroundColor, "#101419"); MenuPanelColor = SafeHex(MenuPanelColor, "#1A2026");
             MenuTextColor = SafeHex(MenuTextColor, "#E8ECF1"); MenuAccentColor = SafeHex(MenuAccentColor, "#F2C94C");
         }

@@ -24,7 +24,9 @@ namespace ZeoCore
         private readonly List<Block> _ship=new List<Block>(),_base=new List<Block>();
         private readonly List<Tank> _tanks=new List<Tank>();
         private readonly List<Inventory> _cargo=new List<Inventory>(),_supply=new List<Inventory>(),_countInventories=new List<Inventory>();
+        private readonly List<Inventory> _onboardSupply=new List<Inventory>(),_connectorSupply=new List<Inventory>();
         private readonly Dictionary<string,int> _targets=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string,double> _importBudget=new Dictionary<string,double>(StringComparer.OrdinalIgnoreCase);
         private readonly RefillTransferGate _gate=new RefillTransferGate();
         private readonly List<Item> _items=new List<Item>();
         private Connector _dock,_other;
@@ -43,10 +45,16 @@ namespace ZeoCore
         private readonly List<Inventory> _unloadSources=new List<Inventory>(),_unloadDestinations=new List<Inventory>();
         private Inventory _pendingInventory;
         private string _pendingType;
+        private Inventory _pendingSource;
+        private double _pendingSourceBefore,_pendingAmount;
+        private bool _pendingUnload;
+        private int _confirmedUnloads,_keptContainers;
         private bool _unloadFinished,_weaponCompatibilityKnown;
         private string _unloadState="Unload off";
         private string _ammoState;
         private bool _ammoFinished;
+        private int _movesPerPass=4;
+        private double _unitsPerTransfer=10000000;
         internal sealed class Recovery
         {
             public string Context {get;set;}
@@ -84,7 +92,7 @@ namespace ZeoCore
         }
         private void Start(LocalHudSnapshot snapshot)
         {
-            if(_gate.Pending){Status="Previous ammo request is unconfirmed. Wait for inventory sync before retrying.";return;}
+            if(_gate.Pending){Status="Previous inventory transfer is unconfirmed. Wait for inventory sync before retrying.";return;}
             var grid=ControlledGrid();var session=MyAPIGateway.Session;
             if(grid==null || session?.Player==null){Status="Control your docked ship from its cockpit first.";return;}
             _identity=session.Player.IdentityId;_context=Context();_gridId=grid.EntityId;
@@ -100,17 +108,28 @@ namespace ZeoCore
             if(!Accessible(_other)||!_dock.IsWorking||!_other.IsWorking){Status="Both connectors must be powered and accessible.";return;}
             ReadBlocks(Group(_other.CubeGrid),_base);
             _cargo.Clear();_supply.Clear();_countInventories.Clear();_targets.Clear();_tanks.Clear();_weapons.Clear();_unloadSources.Clear();_unloadDestinations.Clear();
+            _onboardSupply.Clear();_connectorSupply.Clear();
             var settings=HudSettings.Load();
+            _movesPerPass=Math.Max(1,Math.Min(8,settings.RefillMovesPerPass));
+            _unitsPerTransfer=Math.Max(1,Math.Min(10000000,settings.RefillUnitsPerTransfer));
+            _confirmedUnloads=0;_keptContainers=0;
             foreach(var block in _ship){
-                if(block.HasInventory)for(int i=0;i<block.InventoryCount;i++)_countInventories.Add(block.GetInventory(i));
-                if(block is IMyCargoContainer && block.HasInventory){
-                    _cargo.Add(block.GetInventory(0));
-                    if((block.CustomName??"").IndexOf("[ZEO KEEP]",StringComparison.OrdinalIgnoreCase)<0)_unloadSources.Add(block.GetInventory(0));
+                if(block.HasInventory){
+                    if(block is IMyCargoContainer)_cargo.Add(block.GetInventory(0));
+                    bool keep=(block.CustomName??"").IndexOf("[ZEO KEEP]",StringComparison.OrdinalIgnoreCase)>=0;
+                    if(keep)_keptContainers++;
+                    for(int i=0;i<block.InventoryCount;i++){
+                        var inventory=block.GetInventory(i);if(inventory==null)continue;
+                        _countInventories.Add(inventory);if(keep)continue;
+                        _unloadSources.Add(inventory);_onboardSupply.Add(inventory);
+                        if(block is Connector)_connectorSupply.Add(inventory);
+                    }
                 }
                 var tank=block as Tank;if(settings.RefillTanks&&tank!=null&&tank.IsWorking)_tanks.Add(tank);
             }
             foreach(var block in _base){
                 if(block is IMyCargoContainer && block.HasInventory){_supply.Add(block.GetInventory(0));_unloadDestinations.Add(block.GetInventory(0));}
+                if(block is Connector && block.HasInventory && (block.CustomName??"").IndexOf("[ZEO KEEP]",StringComparison.OrdinalIgnoreCase)<0)_supply.Add(block.GetInventory(0));
                 var production=block as IMyAssembler;if(production!=null)_supply.Add(production.OutputInventory);
             }
             // Compatibility comes from the installed WeaponCore parts, never from stock or HUD visibility.
@@ -135,7 +154,12 @@ namespace ZeoCore
                 _weapons[FuelSubtype]=reactors;
                 if(settings.RefillFuel && settings.FusionReserveTarget>0)_targets[FuelSubtype]=settings.FusionReserveTarget;
             }
+            // Ready weapon/reactor inventories count toward WANT, but never donate reserves.
+            var readyInventories=new HashSet<Inventory>(_weapons.Values.SelectMany(x=>x));
+            _onboardSupply.RemoveAll(readyInventories.Contains);
             // Exact SDX2 reinforced small cargo definition; a renamed ordinary container cannot qualify.
+            _importBudget.Clear();
+            foreach(var target in _targets)_importBudget[target.Key]=QuickRefillPolicy.Missing(target.Value,Count(target.Key));
             _cargo.Sort((a,b)=>Reinforced(b).CompareTo(Reinforced(a)));
             _unloadFinished=!settings.RefillUnloadOtherCargo;
             _unloadState=_unloadFinished?"Unload off":"Unloading non-target cargo";
@@ -149,12 +173,12 @@ namespace ZeoCore
         }
         internal void Update()
         {
-            if(Now<_nextTick)return;_nextTick=Now.AddSeconds(.75);
+            if(Now<_nextTick)return;_nextTick=Now.AddSeconds(.25);
             try{
                 var context=Context();
                 if(!Active){
                     if(context!=null){_identity=MyAPIGateway.Session.Player.IdentityId;LoadRecovery();RestoreRecovery();}
-                    if(_gate.Pending&&context==_context)_gate.Observe(InventoryCount(_pendingInventory,_pendingType,_pendingSubtype));
+                    if(_gate.Pending&&context==_context)ObserveTransfer();
                     return;
                 }
                 var grid=ControlledGrid();
@@ -166,11 +190,17 @@ namespace ZeoCore
                 var baseIds=new HashSet<long>(Group(_other.CubeGrid).Select(x=>x.EntityId));
                 if(_base.Any(x=>x.Closed||!baseIds.Contains(x.CubeGrid.EntityId))){Stop("Supply construct changed. Refill stopped.");return;}
                 if(_gate.Pending){
-                    _gate.Observe(InventoryCount(_pendingInventory,_pendingType,_pendingSubtype));
-                    if(_gate.TimedOut(Now)){Stop("Ammo transfer unconfirmed; stopped without sending another request.");return;}
+                    ObserveTransfer();
+                    if(_gate.TimedOut(Now)){Stop((_pendingUnload ? "Cargo unload" : "Load")+" unconfirmed for "+_pendingSubtype+" after 12s; check manual transfer, access, conveyors and free space. No repeat request sent.");return;}
+                    if(_gate.Pending&&_pendingUnload)_unloadState="Unload: "+_confirmedUnloads+" confirmed; waiting "+(int)(Now-_gate.SentUtc).TotalSeconds+"s for "+_pendingSubtype;
                 }
-                if(!_gate.Pending&&!_unloadFinished)UnloadNext();
-                if(!_gate.Pending&&_unloadFinished&&!_ammoFinished)PullNext();
+                var budget=System.Diagnostics.Stopwatch.StartNew();
+                for(int move=0;move<_movesPerPass&&!_gate.Pending&&budget.Elapsed.TotalMilliseconds<2;move++){
+                    if(!_unloadFinished)UnloadNext();
+                    if(!_gate.Pending&&_unloadFinished&&!_ammoFinished)PullNext();
+                    if(_gate.Pending)ObserveTransfer();
+                    if(_gate.Pending||(_unloadFinished&&_ammoFinished))break;
+                }
                 int full=_tanks.Count(t=>!t.Closed&&t.FilledRatio>=.999);
                 Status=_unloadState+" | "+_ammoState+" | Tanks "+full+"/"+_tanks.Count+" full | press to cancel";
                 if(_ammoFinished&&_unloadFinished&&full==_tanks.Count){Stop(_unloadState+" | "+_ammoState+(_tanks.Count==0 ? " | No working tanks found." : " | Tanks full; restoring original modes."));return;}
@@ -191,17 +221,36 @@ namespace ZeoCore
         }
         private double Count(string subtype){return _countInventories.Sum(i=>InventoryCount(i,TypeFor(subtype),subtype));}
         private bool Usable(Inventory inventory){return inventory!=null && Accessible(inventory.Owner as Block);}
-        private bool Move(Inventory source,Inventory destination,Item item,double limit)
+        private void ObserveTransfer()
+        {
+            // A station receiving the same item elsewhere cannot confirm our unload.
+            // Require the matching decrease on this ship as well as the destination increase.
+            if(InventoryCount(_pendingSource,_pendingType,_pendingSubtype)>
+                _pendingSourceBefore-_pendingAmount+Math.Min(.0001,_pendingAmount*.000001))return;
+            if(_gate.Observe(InventoryCount(_pendingInventory,_pendingType,_pendingSubtype)) && _pendingUnload)
+            { _confirmedUnloads++;_pendingUnload=false; }
+        }
+        private bool Move(Inventory source,Inventory destination,Item item,double limit,bool unloading=false)
         {
             if(ReferenceEquals(source,destination)||!Usable(source)||!Usable(destination)||!source.CanTransferItemTo(destination,item.Type))return false;
             var src=source as MyInventory;var dst=destination as MyInventory;if(src==null||dst==null)return false;
+            bool importing=!unloading && _supply.Contains(source);
+            if(importing)
+            {
+                int target;double budget;
+                if(!_targets.TryGetValue(item.Type.SubtypeId,out target)||!_importBudget.TryGetValue(item.Type.SubtypeId,out budget))return false;
+                limit=Math.Min(limit,Math.Min(budget,QuickRefillPolicy.Missing(target,Count(item.Type.SubtypeId))));
+            }
             // Preserve fractional ore/ingot quantities using the game's fixed-point precision.
-            long lo=0,hi=(long)(Math.Min(Math.Min(limit,(double)item.Amount),1000000)*1000000);
+            long lo=0,hi=(long)(Math.Min(Math.Min(limit,(double)item.Amount),_unitsPerTransfer)*1000000);
             while(lo<hi){long mid=lo+(hi-lo+1)/2;if(destination.CanItemsBeAdded((MyFixedPoint)(mid/1000000d),item.Type))lo=mid;else hi=mid-1;}
             double amount=lo/1000000d;if(item.Type.TypeId!="MyObjectBuilder_Ingot"&&item.Type.TypeId!="MyObjectBuilder_Ore")amount=Math.Floor(amount);
             if(amount<=0)return false;
             _pendingInventory=destination;_pendingSubtype=item.Type.SubtypeId;_pendingType=item.Type.TypeId;
+            _pendingUnload=unloading;_pendingSource=source;_pendingAmount=amount;
+            _pendingSourceBefore=InventoryCount(source,_pendingType,_pendingSubtype);
             _gate.Sent(InventoryCount(destination,_pendingType,_pendingSubtype),amount,Now);
+            if(importing)_importBudget[item.Type.SubtypeId]=Math.Max(0,_importBudget[item.Type.SubtypeId]-amount);
             MyInventory.TransferByUser(src,dst,item.ItemId,-1,(MyFixedPoint)amount);
             return true;
         }
@@ -214,22 +263,25 @@ namespace ZeoCore
         }
         private void UnloadNext()
         {
-            int blocked=0;
+            int blocked=0,kept=0;
             foreach(var source in _unloadSources){
-                if(!Usable(source))continue;var items=new List<Item>();source.GetItems(items);
+                if(!Usable(source)){blocked++;continue;}var items=new List<Item>();source.GetItems(items);
                 foreach(var item in items){
-                    // Keep all native fuel, not just the reserve, and never strip weapons/reactors/cockpit/character inventories.
-                    if(item.Type.TypeId=="MyObjectBuilder_Ingot"&&item.Type.SubtypeId==FuelSubtype)continue;
-                    if(item.Type.TypeId=="MyObjectBuilder_AmmoMagazine"&&(!_weaponCompatibilityKnown || AmmoCatalog.FindSubtype(item.Type.SubtypeId)==null || _weapons.ContainsKey(item.Type.SubtypeId)))continue;
-                    foreach(var destination in _unloadDestinations)if(Move(source,destination,item,(double)item.Amount)){_unloadState="Cargo unload awaiting sync";return;}
+                    // Keep native fuel and configured/unknown ammo in every block inventory; character inventory is outside the scan.
+                    if(item.Type.TypeId=="MyObjectBuilder_Ingot"&&item.Type.SubtypeId==FuelSubtype){kept++;continue;}
+                    if(item.Type.TypeId=="MyObjectBuilder_AmmoMagazine"&&(!_weaponCompatibilityKnown || AmmoCatalog.FindSubtype(item.Type.SubtypeId)==null || _weapons.ContainsKey(item.Type.SubtypeId))){kept++;continue;}
+                    foreach(var destination in _unloadDestinations)if(Move(source,destination,item,(double)item.Amount,true)){_unloadState="Unload: "+_confirmedUnloads+" confirmed; awaiting "+item.Type.SubtypeId;return;}
                     blocked++;
                 }
             }
-            _unloadFinished=true;_unloadState=blocked==0?"Cargo unload complete":"Cargo unload partial: "+blocked+" blocked stack(s)";
+            _unloadFinished=true;
+            _unloadState="Unload: "+_confirmedUnloads+" confirmed, "+kept+" protected stack(s), "+_keptContainers+" KEEP container(s)";
+            if(blocked>0)_unloadState+="; "+blocked+" blocked (access / conveyors / space)";
+            else if(_confirmedUnloads==0)_unloadState+="; no eligible cargo moved";
         }
         private void PullNext()
         {
-            int missingTypes=0,emptyWeapons=0;
+            int missingTypes=0,emptyWeapons=0,blockedConnectorStocks=0;
             foreach(var target in _targets){
                 var guns=_weapons[target.Key];double have=Count(target.Key);
                 int need=QuickRefillPolicy.Missing(target.Value,have);
@@ -238,19 +290,26 @@ namespace ZeoCore
                 foreach(var gun in guns){
                     double shortfall=Math.Max(0,share-InventoryCount(gun,TypeFor(target.Key),target.Key));
                     if(shortfall<=0)continue;
-                    if(Supply(gun,_cargo,target.Key,shortfall) || (need>0&&Supply(gun,_supply,target.Key,Math.Min(need,shortfall)))){_ammoState="Loading weapons / reactors; waiting for sync";return;}
+                    if(Supply(gun,_onboardSupply,target.Key,shortfall) || (need>0&&Supply(gun,_supply,target.Key,Math.Min(need,shortfall)))){_ammoState="Loading weapons / reactors; waiting for sync";return;}
                     if(InventoryCount(gun,TypeFor(target.Key),target.Key)==0)emptyWeapons++;
                 }
                 if(target.Key!=FuelSubtype){
                     foreach(var safe in _cargo.Where(Reinforced))
-                        if(Supply(safe,_cargo.Where(i=>!Reinforced(i)),target.Key,1000000)){_ammoState="Moving ammo reserves to reinforced cargo";return;}
+                        if(Supply(safe,_onboardSupply.Where(i=>!Reinforced(i)),target.Key,_unitsPerTransfer)){_ammoState="Moving ammo reserves to reinforced cargo";return;}
                 }
+                // Count connector stock toward WANT, then clear its remaining configured
+                // reserves into ship cargo. Never import reserves into a docking buffer.
+                foreach(var destination in _cargo)
+                    if(Supply(destination,_connectorSupply,target.Key,_unitsPerTransfer)){_ammoState="Clearing connector reserves into cargo; waiting for sync";return;}
+                foreach(var source in _connectorSupply)
+                    if(InventoryCount(source,TypeFor(target.Key),target.Key)>0)blockedConnectorStocks++;
                 if(need==0)continue;missingTypes++;
                 foreach(var destination in _cargo)if(Supply(destination,_supply,target.Key,need)){_ammoState="Loading reserves; waiting for sync";return;}
             }
             _ammoFinished=true;
             _ammoState=_targets.Count==0?"No compatible configured load targets (check weapon scan / WANT)":
                 missingTypes==0&&emptyWeapons==0?"Load targets met":"Load partial: "+missingTypes+" reserve type(s) short, "+emptyWeapons+" empty weapon/reactor inventory(s); check stock, access and conveyors";
+            if(blockedConnectorStocks>0)_ammoState+="; "+blockedConnectorStocks+" connector reserve stack(s) blocked (access / conveyors / cargo space)";
         }
         private void Stop(string message)
         {

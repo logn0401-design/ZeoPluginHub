@@ -8,7 +8,7 @@ namespace ZeoCore
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.0.7-DOCKED-REFILL";
+        public const string Version = "1.0.8";
         public static Plugin Instance { get; private set; }
 
         // Pulsar supplies the matching, hash-verified overlay before Init.
@@ -32,6 +32,7 @@ namespace ZeoCore
         private readonly QuickRefillController _refill = new QuickRefillController();
         internal static bool RefillActive { get { return Instance?._refill.Active ?? false; } }
         internal static string RefillStatus { get { return Instance?._refill.Status ?? "Start a world to use Quick Refill."; } }
+        internal static void TargetMarkAction(){Instance?._hud?.TargetAction();}
         internal static void ToggleRefill() { if(Instance!=null) Instance._refill.Toggle(Instance._engine?.GetHudSnapshot()); }
         private bool _runtimeReadyNotified;
 
@@ -50,6 +51,8 @@ namespace ZeoCore
             try
             {
                 Directory.CreateDirectory(DataDirectory);
+                if (CatalogOverlayPath == null)
+                    LoadAssets(new Dictionary<string, string> { { "ZeoOverlayPackage", DataDirectory } });
                 Log("============================================================");
                 Log("ZeoCore v" + Version + " OPEN TEST RESET + UNIFIED TACTICAL NETWORK + WAR ROOM HUD init");
                 _engine = new ZeoCoreEngine();
@@ -61,16 +64,36 @@ namespace ZeoCore
             }
         }
 
+        private Zeo.Performance.UpdateProfiler _updateProfiler;
+        private Zeo.Performance.UpdateProfiler _refillProfiler, _engineProfiler, _hudProfiler;
+        private bool _profilingAlt;
         public void Update()
         {
-            _refill.Update();
+            if(_updateProfiler==null)
+            {
+                _updateProfiler=new Zeo.Performance.UpdateProfiler("Core",Log);
+                _refillProfiler=new Zeo.Performance.UpdateProfiler("Core.Refill",Log);
+                _engineProfiler=new Zeo.Performance.UpdateProfiler("Core.Engine",Log);
+                _hudProfiler=new Zeo.Performance.UpdateProfiler("Core.Hud",Log);
+            }
+            bool alt=false;try { alt=MyAPIGateway.Input!=null && MyAPIGateway.Input.IsAnyAltKeyPressed(); }catch{}
+            _profilingAlt=alt;
+            long start=System.Diagnostics.Stopwatch.GetTimestamp();
+            try { UpdateCore(); } finally { _updateProfiler.Record(start,alt); }
+        }
+        private void UpdateCore()
+        {
+            long phase=System.Diagnostics.Stopwatch.GetTimestamp();
+            try { _refill.Update(); } finally { _refillProfiler.Record(phase,_profilingAlt); }
             try
             {
                 if (_engine == null) _engine = new ZeoCoreEngine();
                 if (_hud == null) _hud = new ZeoHudController(_engine, _engine.Config);
 
-                _engine.Update();
-                _hud.Update();
+                phase=System.Diagnostics.Stopwatch.GetTimestamp();
+                try { _engine.Update(); } finally { _engineProfiler.Record(phase,_profilingAlt); }
+                phase=System.Diagnostics.Stopwatch.GetTimestamp();
+                try { _hud.Update(); } finally { _hudProfiler.Record(phase,_profilingAlt); }
 
                 if (!_runtimeReadyNotified && MyAPIGateway.Session != null && MyAPIGateway.Utilities != null)
                 {

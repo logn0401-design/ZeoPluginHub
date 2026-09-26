@@ -9,7 +9,7 @@ using VRageMath;
 
 namespace ZeoCore
 {
-    internal sealed class ZeoHudController : IDisposable
+    internal sealed partial class ZeoHudController : IDisposable
     {
         private sealed class SpectrumSeen
         {
@@ -19,6 +19,11 @@ namespace ZeoCore
         }
 
         private readonly ZeoCoreEngine _engine;
+        private readonly ExactTrackFusion _exactFusion=new ExactTrackFusion();
+        private int _exactFusionMerged,_exactFusionPeak,_exactFusionLogFrame;
+        private readonly Func<long,long> _resolveTrackIdentity;
+        private readonly Dictionary<long,long?> _liveTrackIdentities=new Dictionary<long,long?>();
+        private static readonly Action<HudTrack,HudTrack> MergeKnowledge=MergeTrackKnowledge;
         private readonly HudSettings _settings;
         private readonly SpectrumClient _spectrum = new SpectrumClient();
         private readonly FleetLinkClient _fleet;
@@ -45,6 +50,8 @@ namespace ZeoCore
         private long _overlaySequence;
         private DateTime _lastLayoutPublishUtc;
         private bool _wasEditingLayout;
+        private readonly Dictionary<long,SpectrumSeen> _spectrumByGrid=new Dictionary<long,SpectrumSeen>();
+        private readonly Func<long,Vector3D?> _nativeSignalPosition;
         private readonly Dictionary<long, SpectrumSeen> _spectrumPersistent = new Dictionary<long, SpectrumSeen>();
         private readonly List<SpectrumClient.DetectionData> _spectrumCache = new List<SpectrumClient.DetectionData>();
         private bool _readyLogged;
@@ -65,7 +72,10 @@ namespace ZeoCore
 
         public ZeoHudController(ZeoCoreEngine engine, ZeoConfig coreConfig)
         {
+            _nativeSignalPosition=ReadNativeSignalPosition;
+            _resolveTrackIdentity=ResolveCachedTrackIdentity;
             _engine = engine;
+            _targetConfig=coreConfig;
             _settings = HudSettings.Load();
 
             if (!_settings.PrivacyInitialized)
@@ -105,7 +115,7 @@ namespace ZeoCore
         {
             var session = MyAPIGateway.Session;
             if (session == null || MyAPIGateway.Utilities == null)
-            { _distressGps.Reset(); return; }
+            { _distressGps.Reset();DisposeTargets();_targetContext="";_chosenIds=null; return; }
 
             int frame;
             try { frame = session.GameplayFrameCounter; }
@@ -133,7 +143,7 @@ namespace ZeoCore
                 if (!string.IsNullOrEmpty(_lastSectorId))
                 {
                     Plugin.Log("Sector transition " + _lastSectorId + " -> " + sector.Id + " (" + sector.Name + ") // clearing local track caches");
-                    _spectrumPersistent.Clear();
+                    _spectrumPersistent.Clear(); _spectrumByGrid.Clear();
                     _spectrumCache.Clear();
                     _ids.Clear();
                 }
@@ -145,6 +155,7 @@ namespace ZeoCore
             PollDistressKey(frame, sector);
             UpdateDistressStatus();
 
+            UpdateTargets(frame,sector,trust);
             _spectrum.Update(frame);
             // v0.5.9.1 LAB: gameplay receive is intentionally not gated by
             // AccountLink/DX state. The server lab gateway still maps this
@@ -199,16 +210,14 @@ namespace ZeoCore
             try
             {
                 if (MyAPIGateway.Input == null) return;
-                MyKeys key = MyKeys.Home;
-                switch (_settings.MenuKey)
-                {
-                    case HudMenuKey.Insert: key = MyKeys.Insert; break;
-                    case HudMenuKey.PageUp: key = MyKeys.PageUp; break;
-                    case HudMenuKey.PageDown: key = MyKeys.PageDown; break;
-                    case HudMenuKey.End: key = MyKeys.End; break;
-                }
-
-                if (!MyAPIGateway.Input.IsNewKeyPressed(key)) return;
+                MyKeys key=(MyKeys)ZeoOverlay.MenuBinding.Resolve((int)_settings.MenuKey,_settings.MenuKeyCode);
+                if(key==MyKeys.None || !MyAPIGateway.Input.IsNewKeyPressed(key))return;
+                if(ZeoMenuBindingScreen.IsOpen || !GameWindowState.Capture().Focused)return;
+                var focus=Sandbox.Graphics.GUI.MyScreenManager.GetScreenWithFocus();
+                bool ownMenu=focus is ZeoNativeSettingsScreen;
+                if(!ownMenu && !(focus is Sandbox.Game.Gui.MyGuiScreenGamePlay))return;
+                if(MyAPIGateway.Gui==null || MyAPIGateway.Gui.ChatEntryVisible)return;
+                if(ownMenu && ((ZeoNativeSettingsScreen)focus).IsEditingTextOrBinding)return;
                 if (frame >= _lastMenuKeyFrame && frame - _lastMenuKeyFrame < 8) return;
                 _lastMenuKeyFrame = frame;
                 OpenMenu();
@@ -232,7 +241,7 @@ namespace ZeoCore
                 bool allowed=key!=0 && gui!=null && !gui.ChatEntryVisible && !gui.IsCursorVisible &&
                     Sandbox.Graphics.GUI.MyScreenManager.GetScreenWithFocus() is Sandbox.Game.Gui.MyGuiScreenGamePlay &&
                     GameWindowState.Capture().Focused;
-                bool conflict=ZeoOverlay.QuickRefillBinding.Conflict(key,(int)_settings.MenuKey,_settings.DistressEnabled,(int)_settings.DistressKey)!=null;
+                bool conflict=ZeoOverlay.QuickRefillBinding.Conflict(key,(int)_settings.MenuKey,_settings.DistressEnabled,(int)_settings.DistressKey,_settings.MenuKeyCode)!=null;
                 if(_refillKey.Poll(key,modifier,down,match,allowed,conflict))
                 {
                     Plugin.ToggleRefill();
@@ -242,11 +251,22 @@ namespace ZeoCore
             catch(Exception ex){Plugin.Log("Quick Refill key: "+ex.Message);}
         }
 
+        private string _sosNotification;
+        private long _sosNotificationExpiresMs;
+        private void NotifyDistress(string message,int duration,string color)
+        {
+            _sosNotification=message;
+            _sosNotificationExpiresMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+Math.Max(3500,duration);
+            // Keep a native fallback when the external HUD is unavailable or disabled.
+            if(!_settings.HudEnabled || !_settings.ShowDistressBanner || !_overlay.Running)
+                Plugin.Notify(message,duration,color);
+        }
+
         private void PollDistressKey(int frame, SectorSnapshot sector)
         {
             try
             {
-                if (!_settings.DistressEnabled || MyAPIGateway.Input == null) { _distressHoldStartFrame=-1; _distressTriggeredThisHold=false; return; }
+                if (!_settings.DistressEnabled || MyAPIGateway.Input == null || ZeoMenuBindingScreen.IsOpen || !(Sandbox.Graphics.GUI.MyScreenManager.GetScreenWithFocus() is Sandbox.Game.Gui.MyGuiScreenGamePlay)) { _distressHoldStartFrame=-1; _distressTriggeredThisHold=false; return; }
                 MyKeys key = DistressKeyToMyKey(_settings.DistressKey);
                 bool down = MyAPIGateway.Input.IsKeyPress(key);
                 if (!down)
@@ -265,12 +285,12 @@ namespace ZeoCore
                 if (!_engine.HasGameFaction)
                 {
                     _distressStatus = "LOCAL ONLY - no game faction";
-                    Plugin.Notify("ZEO DISTRESS // NO GAME FACTION", 3500, "White");
+                    NotifyDistress("ZEO DISTRESS // NO GAME FACTION", 3500, "White");
                     return;
                 }
                 if (!local.HasShip)
                 {
-                    Plugin.Notify("ZEO DISTRESS // NO CONTROLLED SHIP",3000,"Red");
+                    NotifyDistress("ZEO DISTRESS // NO CONTROLLED SHIP",3000,"Red");
                     _distressStatus="NO CONTROLLED SHIP";
                     return;
                 }
@@ -318,20 +338,20 @@ namespace ZeoCore
             if (_distress == null)
             {
                 _distressStatus="SERVER NOT READY";
-                Plugin.Notify("ZEO DISTRESS // SERVER ENDPOINT NOT READY",4000,"Red");
+                NotifyDistress("ZEO DISTRESS // SERVER ENDPOINT NOT READY",4000,"Red");
                 return;
             }
             if (!_distress.TrySend(payload))
             {
                 _distressStatus=_distress.Busy ? "DISTRESS SEND BUSY" : "DISTRESS SEND FAILED";
-                Plugin.Notify("ZEO DISTRESS // SEND BUSY",2500,"Red");
+                NotifyDistress("ZEO DISTRESS // SEND BUSY",2500,"Red");
                 return;
             }
 
             _pendingDistressAction=activate ? "activate" : "clear";
             _pendingDistressExpiresMs=activate ? now + ttlSeconds*1000L : 0;
             _distressStatus=activate ? "SOS SENDING..." : "CLEARING SOS...";
-            Plugin.Notify(activate ? "ZEO DISTRESS // SENDING SOS" : "ZEO DISTRESS // CLEARING",2500,activate ? "Red" : "White");
+            NotifyDistress(activate ? "ZEO DISTRESS // SENDING SOS" : "ZEO DISTRESS // CLEARING",2500,activate ? "Red" : "White");
             Plugin.Log("Distress "+(activate?"ACTIVATE":"CLEAR")+" requested sector="+(sector.Id??"unknown")+" ttl="+ttlSeconds+"s");
         }
 
@@ -357,7 +377,7 @@ namespace ZeoCore
                     _pendingDistressAction="";
                     _pendingDistressExpiresMs=0;
                     _distressStatus=activated ? "ACTIVE // SERVER CONFIRMED" : "CLEARED // SERVER CONFIRMED";
-                    Plugin.Notify(activated ? "ZEO DISTRESS // SOS CONFIRMED" : "ZEO DISTRESS // CLEAR CONFIRMED",3500,activated ? "Red" : "Green");
+                    NotifyDistress(activated ? "ZEO DISTRESS // SOS CONFIRMED" : "ZEO DISTRESS // CLEAR CONFIRMED",3500,activated ? "Red" : "Green");
                 }
                 else if (status > 0 || (!_distress.Busy && !string.Equals(_distress.LastError,"sending",StringComparison.OrdinalIgnoreCase) && !string.Equals(_distress.LastError,"waiting",StringComparison.OrdinalIgnoreCase)))
                 {
@@ -365,7 +385,7 @@ namespace ZeoCore
                     _pendingDistressAction="";
                     _pendingDistressExpiresMs=0;
                     _distressStatus=status > 0 ? "SERVER HTTP "+status : "SEND ERROR // "+_distress.LastError;
-                    Plugin.Notify("ZEO DISTRESS // "+failed.ToUpperInvariant()+" FAILED",3500,"Red");
+                    NotifyDistress("ZEO DISTRESS // "+failed.ToUpperInvariant()+" FAILED",3500,"Red");
                 }
                 return;
             }
@@ -442,7 +462,7 @@ namespace ZeoCore
             bool needSpectrum = _settings.ShowLocalSpectrum || _settings.ShareSpectrumSignals;
             if (!needSpectrum)
             {
-                _spectrumPersistent.Clear();
+                _spectrumPersistent.Clear(); _spectrumByGrid.Clear();
                 _engine.SetSharedSpectrumDetections(null);
                 return;
             }
@@ -470,10 +490,11 @@ namespace ZeoCore
 
             if (!_settings.ShowLocalSpectrum)
             {
-                _spectrumPersistent.Clear();
+                _spectrumPersistent.Clear(); _spectrumByGrid.Clear();
                 return;
             }
 
+            _spectrumByGrid.Clear();
             for (int i = 0; i < fresh.Count; i++)
             {
                 var d = fresh[i];
@@ -488,6 +509,10 @@ namespace ZeoCore
                         seen.Detection.DetectedAt, d.Velocity, d.DetectedAt);
                 seen.Detection = d;
                 seen.LastSeenFrame = frame;
+                long gridId=d.EmitterId;NormalizeSpectrumGridIdentity(d.EmitterId,ref gridId);
+                SpectrumSeen existingSignal;
+                if(!_spectrumByGrid.TryGetValue(gridId,out existingSignal)||existingSignal.Detection.DetectedAt<=d.DetectedAt)
+                    _spectrumByGrid[gridId]=seen;
             }
 
             int keepFrames = Math.Max(120, _settings.LastKnownSeconds * 60);
@@ -656,6 +681,8 @@ namespace ZeoCore
                 DistressLocalActive = _localDistressActive,
                 DistressServerReady = _distress != null && _distress.LastStatus >= 200 && _distress.LastStatus < 300,
                 DistressStatus = _distressStatus,
+                SosNotification = _sosNotification,
+                SosNotificationExpiresMs = _sosNotificationExpiresMs,
                 ActiveDistressCount = fleet.Distress.Count
             };
 
@@ -743,20 +770,23 @@ namespace ZeoCore
                         SpectrumSeen signal;
                         if (!long.TryParse(t.RawEmitterId, out emitter) || !_spectrumPersistent.TryGetValue(emitter, out signal)) continue;
                         int tick = MyAPIGateway.Session.GameplayFrameCounter;
-                        if (SpectrumMotion.Age(tick, signal.Detection.DetectedAt) > 15) continue;
+                        if (!FriendlyTrackPolicy.RenderableSpectrum(SpectrumMotion.Age(tick, signal.Detection.DetectedAt))) continue;
                         renderPosition = SpectrumMotion.Position(signal.Detection.Position, signal.Detection.Velocity,
                             signal.Acceleration, signal.Detection.DetectedAt, tick);
                     }
+                    else if(_settings.MarkerAnchor==HudMarkerAnchor.Auto &&
+                        FriendlyTrackPolicy.FreshNetworkFriendly(t,_settings.StaleSeconds) && TryFriendlySpectrumPosition(t,out renderPosition)) { }
                     else renderPosition = MarkerPositionResolver.Resolve(t, _settings.MarkerAnchor,
-                        renderPredictionAge, _settings.StaleSeconds, LiveMarkerPosition);
+                        renderPredictionAge, _settings.StaleSeconds, LiveMarkerPosition, _nativeSignalPosition);
                     Project(camera, renderPosition, out screen, out offscreen);
 
-                    if (_settings.Declutter && !t.Focused && IsOccupied(screen))
+                    if (_settings.Declutter && !t.AttackTarget && FriendlyTrackPolicy.CanDeclutter(t) && IsOccupied(screen))
                         continue;
                     _occupied.Add(screen);
 
                     markers.Add(new OverlayMarker
                     {
+                        AttackTarget = t.AttackTarget,
                         TrackId = t.TrackId,
                         Source = (int)t.Source,
                         Friendly = t.Friendly,
@@ -780,6 +810,24 @@ namespace ZeoCore
             return markers;
         }
 
+        private bool TryFriendlySpectrumPosition(HudTrack track,out Vector3D position)
+        {
+            position=Vector3D.Zero;long emitter;SpectrumSeen signal;
+            if(!long.TryParse(track.RawEmitterId,out emitter)||!_spectrumPersistent.TryGetValue(emitter,out signal))return false;
+            int tick=MyAPIGateway.Session.GameplayFrameCounter;
+            if(!FriendlyTrackPolicy.RenderableSpectrum(SpectrumMotion.Age(tick,signal.Detection.DetectedAt)))return false;
+            position=SpectrumMotion.Position(signal.Detection.Position,signal.Detection.Velocity,signal.Acceleration,signal.Detection.DetectedAt,tick);
+            return !(double.IsNaN(position.X)||double.IsNaN(position.Y)||double.IsNaN(position.Z)||double.IsInfinity(position.X)||double.IsInfinity(position.Y)||double.IsInfinity(position.Z));
+        }
+
+        private Vector3D? ReadNativeSignalPosition(long gridId)
+        {
+            SpectrumSeen signal;
+            if(!_spectrumByGrid.TryGetValue(gridId,out signal))return null;
+            int tick=MyAPIGateway.Session.GameplayFrameCounter;
+            if(SpectrumMotion.Age(tick,signal.Detection.DetectedAt)>15)return null;
+            return SpectrumMotion.Position(signal.Detection.Position,signal.Detection.Velocity,signal.Acceleration,signal.Detection.DetectedAt,tick);
+        }
         private static readonly Func<long, Vector3D?> LiveMarkerPosition = ReadLiveMarkerPosition;
 
         private static Vector3D? ReadLiveMarkerPosition(long entityId)
@@ -800,7 +848,7 @@ namespace ZeoCore
 
         private void PublishCameraMarkers()
         {
-            if (!_settings.HudEnabled || !_markerShipActive || MyAPIGateway.Session == null || MyAPIGateway.Session.Camera == null) return;
+            if (!_settings.HudEnabled || !_markerShipActive || _markerTracks.Count == 0 || MyAPIGateway.Session == null || MyAPIGateway.Session.Camera == null) return;
             double age=_lastTrackBuildUtc==DateTime.MinValue ? 0 : PredictionAge(Math.Max(0,(DateTime.UtcNow-_lastTrackBuildUtc).TotalSeconds));
             _overlay.SendMarkers(new OverlayMarkerUpdate {
                 Sequence=++_overlaySequence,
@@ -826,8 +874,40 @@ namespace ZeoCore
             }
         }
 
+        private readonly OwnShipTrackFilter _ownShipTracks=new OwnShipTrackFilter();
+        private readonly List<IMyCubeGrid> _ownMechanicalGrids=new List<IMyCubeGrid>(16);
+        private long _ownFilterGrid;
+        private int _ownFilterFrame=-120;
+        private static readonly Func<long,long> ResolveMarkerGrid=ResolveMarkerGridId;
+        private static long ResolveMarkerGridId(long id){long grid=id;NormalizeSpectrumGridIdentity(id,ref grid);return grid;}
+        private bool IsOwnShipTrack(long id){return _ownShipTracks.Contains(id,ResolveMarkerGrid);}
+        private void RefreshOwnShipFilter(int frame,LocalHudSnapshot local)
+        {
+            long own=local.HasShip?local.OwnGridId:0;
+            if(own==_ownFilterGrid&&frame>=_ownFilterFrame&&frame-_ownFilterFrame<30)return;
+            _ownFilterGrid=own;_ownFilterFrame=frame;_ownShipTracks.Reset(own);_ownMechanicalGrids.Clear();
+            if(own==0)return;
+            try {
+                IMyEntity entity;
+                if(!MyAPIGateway.Entities.TryGetEntityById(own,out entity))return;
+                var grid=entity as IMyCubeGrid;if(grid==null)return;
+                MyAPIGateway.GridGroups.GetGroup(grid,GridLinkTypeEnum.Mechanical,_ownMechanicalGrids);
+                for(int i=0;i<_ownMechanicalGrids.Count;i++)if(_ownMechanicalGrids[i]!=null)_ownShipTracks.AddGrid(_ownMechanicalGrids[i].EntityId);
+            } catch { } // Exact own-grid ID remains protected if group lookup is unavailable.
+        }
+
+        private long? ReadCachedTrackIdentity(long id)
+        {
+            long? result;if(!_liveTrackIdentities.TryGetValue(id,out result)){
+                result=_engine.TryResolveHudTrackIdentity(id);_liveTrackIdentities[id]=result;
+            }
+            return result;
+        }
+        private long ResolveCachedTrackIdentity(long id){return ReadCachedTrackIdentity(id)??id;}
         private void BuildTracks(int frame, LocalHudSnapshot local, FleetPictureSnapshot fleet)
         {
+            _liveTrackIdentities.Clear();
+            RefreshOwnShipFilter(frame,local);
             _tracks.Clear();
             _trackByEntity.Clear();
             _fusionBuckets.Clear();
@@ -850,7 +930,7 @@ namespace ZeoCore
                 for (int i = 0; i < local.WeaponCoreTracks.Count && i < processCap; i++)
                 {
                     HudTrack t = local.WeaponCoreTracks[i].Clone();
-                    if (t.EntityId == local.OwnGridId) continue;
+                    if (IsOwnShipTrack(t.EntityId)) continue;
                     t.Key = "W:" + t.EntityId;
                     PredictPosition(t, localAge);
                     AddKinematics(t, originNow, originVelocity);
@@ -864,20 +944,22 @@ namespace ZeoCore
                 for (int i = 0; i < fleet.Friendlies.Count && i < processCap; i++)
                 {
                     HudTrack t = fleet.Friendlies[i].Clone();
-                    if (t.EntityId != 0 && t.EntityId == local.OwnGridId) continue;
+                    if (IsOwnShipTrack(t.EntityId)) continue;
                     t.Friendly = true;
                     t.Relation = "friendly";
-                    HudTrack existing = FindExistingByEntityId(t.EntityId);
-                    if (existing != null)
-                    {
-                        MergeTrackKnowledge(existing, t);
-                        continue;
-                    }
                     ResolveFleetSector(t, local);
                     if (!CanProjectFleetTrack(t)) continue;
                     t.Key = "F:" + t.EntityId;
                     PredictPosition(t, PredictionAge(t.AgeSeconds));
                     AddKinematics(t, originNow, originVelocity);
+                    HudTrack existing = FindExistingByEntityId(t.EntityId);
+                    if (existing != null)
+                    {
+                        if(FriendlyTrackPolicy.FreshNetworkFriendly(t,_settings.StaleSeconds)){
+                            MergeTrackKnowledge(t,existing);if(Allowed(t))ReplaceTrack(existing,t);
+                        }else MergeTrackKnowledge(existing,t);
+                        continue;
+                    }
                     if (Allowed(t)) AddTrack(t);
 
                 }
@@ -888,6 +970,7 @@ namespace ZeoCore
                 for (int i = 0; i < fleet.Contacts.Count && i < processCap; i++)
                 {
                     HudTrack t = fleet.Contacts[i].Clone();
+                    if(IsOwnShipTrack(t.EntityId))continue;
                     bool sharedSignal = t.Source == HudTrackSource.FleetSignal ||
                                         string.Equals(t.Relation, "signal", StringComparison.OrdinalIgnoreCase) ||
                                         string.Equals(t.ContactType, "signal", StringComparison.OrdinalIgnoreCase) ||
@@ -930,7 +1013,7 @@ namespace ZeoCore
                 for (int i=0; i<fleet.Distress.Count; i++)
                 {
                     HudTrack t=fleet.Distress[i].Clone();
-                    if (t.EntityId != 0 && t.EntityId == local.OwnGridId) continue;
+                    if (IsOwnShipTrack(t.EntityId)) continue;
                     ResolveFleetSector(t,local);
                     if (!CanProjectDistressTrack(t)) continue;
                     t.Key="D:"+t.EntityId;
@@ -952,6 +1035,8 @@ namespace ZeoCore
                 {
                     var d = _spectrumCache[i];
                     if (d.SelfOwned) continue;
+                    double nativeAge=SpectrumAgeSeconds(d.EmitterId,frame);
+                    if(!FriendlyTrackPolicy.RenderableSpectrum(nativeAge))continue;
 
                     string ownFaction = spectrumOwnFaction;
                     string detectedFaction = (d.FactionTag ?? "").Trim();
@@ -963,6 +1048,7 @@ namespace ZeoCore
                     long spectrumId = d.EmitterId;
                     Vector3D spectrumPosition = d.Position;
                     NormalizeSpectrumGridIdentity(d.EmitterId, ref spectrumId);
+                    if(IsOwnShipTrack(spectrumId))continue;
                     SpectrumSeen signal;
                     if (_spectrumPersistent.TryGetValue(d.EmitterId, out signal))
                         spectrumPosition = SpectrumMotion.Position(d.Position, d.Velocity, signal.Acceleration, d.DetectedAt, frame);
@@ -978,7 +1064,7 @@ namespace ZeoCore
                         Position = spectrumPosition,
                         Velocity = d.Velocity,
                         Friendly = spectrumFriendly,
-                        AgeSeconds = SpectrumAgeSeconds(d.EmitterId, frame),
+                        AgeSeconds = nativeAge,
                         SignalStrength = double.IsNaN(d.Strength) || double.IsInfinity(d.Strength) ? (double?)null : d.Strength,
                         RawEmitterId = d.EmitterId.ToString(System.Globalization.CultureInfo.InvariantCulture)
                     };
@@ -994,7 +1080,8 @@ namespace ZeoCore
                         // WeaponCore/shared knowledge is merged into it. This uses the
                         // V1.3 dictionary + spatial-bucket resolver and avoids the old
                         // O(N^2) post-pass that could hurt personal sim speed.
-                        if (existing.Source == HudTrackSource.Spectrum && existing.AgeSeconds <= t.AgeSeconds)
+                        if (FriendlyTrackPolicy.FreshNetworkFriendly(existing,_settings.StaleSeconds) ||
+                            (existing.Source == HudTrackSource.Spectrum && existing.AgeSeconds <= t.AgeSeconds))
                         {
                             MergeTrackKnowledge(existing, t);
                         }
@@ -1009,6 +1096,14 @@ namespace ZeoCore
                 }
             }
 
+            AddTargetTracks(local,originNow);
+            int exactMerged=_exactFusion.Apply(_tracks,_resolveTrackIdentity,MergeKnowledge,_settings.StaleSeconds);
+            _exactFusionMerged+=exactMerged;_exactFusionPeak=Math.Max(_exactFusionPeak,exactMerged);
+            if(frame<_exactFusionLogFrame||frame-_exactFusionLogFrame>=1800){
+                if(_exactFusionMerged>0)Plugin.Log("HUD TRACK FUSION exact-duplicates-removed="+_exactFusionMerged+" peak-per-refresh="+_exactFusionPeak);
+                _exactFusionMerged=0;_exactFusionPeak=0;_exactFusionLogFrame=frame;
+            }
+            SharedTrackPolicy.Apply(_tracks,_settings.MaxSharedTracks,_settings.MaxSharedTrackDistanceKm);
             for (int i = 0; i < _tracks.Count; i++)
             {
                 // Preserve WeaponCore focus even when the visible track came from
@@ -1016,9 +1111,10 @@ namespace ZeoCore
                 if (local.FocusEntityId != 0 && _tracks[i].EntityId == local.FocusEntityId)
                     _tracks[i].Focused = true;
                 var identified = _tracks[i];
+                if(identified.Friendly)identified.AttackTarget=false;
                 string stable = identified.IsDistress ? identified.Key :
                     (identified.EntityId != 0 ? "E:" + identified.EntityId : identified.Key);
-                identified.TrackId = _ids.Get(stable, identified.Source == HudTrackSource.Spectrum ? identified.Key : null);
+                identified.TrackId = _ids.GetForAliases(stable,identified.IdentityAliases);
                 identified.Priority = Score(identified);
             }
 
@@ -1070,7 +1166,7 @@ namespace ZeoCore
             {
                 if (original == null) continue;
                 HudTrack t = original.Clone();
-                if (t.EntityId != 0 && t.EntityId == local.OwnGridId) continue;
+                if (IsOwnShipTrack(t.EntityId)) continue;
                 ResolveFleetSector(t, local);
                 if (!_settings.ShowCrossSectorRoster && !t.SameSector) continue;
                 if (t.SameSector && t.HasPosition && (local.HasShip || (_settings.KeepTosOutsideShip && local.HasObserver)))
@@ -1290,6 +1386,10 @@ namespace ZeoCore
                         (candidate.Source == HudTrackSource.Spectrum || candidate.Source == HudTrackSource.FleetSignal))
                         continue;
 
+                    // Do not let the older proximity fallback undo exact identity safety.
+                    if(incoming.EntityId!=0&&candidate.EntityId!=0&&incoming.EntityId!=candidate.EntityId&&
+                        ExactTrackFusion.Conflicts(ReadCachedTrackIdentity(incoming.EntityId),ReadCachedTrackIdentity(candidate.EntityId)))continue;
+
                     string a = (candidate.Relation ?? "unknown").ToLowerInvariant();
                     string b = (incoming.Relation ?? "unknown").ToLowerInvariant();
                     if (a != "unknown" && b != "unknown" && a != b) continue;
@@ -1322,19 +1422,10 @@ namespace ZeoCore
         private static void MergeTrackKnowledge(HudTrack existing, HudTrack incoming)
         {
             if (existing == null || incoming == null) return;
+            ExactTrackFusion.Remember(existing,incoming);
 
-            string current = (existing.Relation ?? "unknown").Trim().ToLowerInvariant();
-            string added = (incoming.Relation ?? "unknown").Trim().ToLowerInvariant();
-            if ((string.IsNullOrEmpty(current) || current == "unknown" || current == "signal") &&
-                (added == "friendly" || added == "hostile"))
-            {
-                existing.Relation = added;
-                existing.Friendly = added == "friendly";
-            }
-            else if (current == "friendly")
-            {
-                existing.Friendly = true;
-            }
+            TrackRelationship.Merge(existing,incoming);
+            existing.AttackTarget |= incoming.AttackTarget;
 
             if (incoming.SignalStrength.HasValue && (!existing.SignalStrength.HasValue || incoming.AgeSeconds <= existing.AgeSeconds))
             {
@@ -1344,8 +1435,9 @@ namespace ZeoCore
             }
             if (incoming.Focused) existing.Focused = true;
             if (incoming.Threat > existing.Threat) existing.Threat = incoming.Threat;
-            if (incoming.AgeSeconds < existing.AgeSeconds) existing.AgeSeconds = incoming.AgeSeconds;
-            existing.Stale = existing.Stale && incoming.Stale;
+            FriendlyTrackPolicy.MergeFreshness(existing,incoming);
+            if(FriendlyTrackPolicy.NetworkFriendly(existing)&&incoming.Source==HudTrackSource.Spectrum&&!string.IsNullOrWhiteSpace(incoming.RawEmitterId))
+                existing.RawEmitterId=incoming.RawEmitterId;
 
             bool genericName = string.IsNullOrWhiteSpace(existing.Name) ||
                                existing.Name.StartsWith("CONTACT ", StringComparison.OrdinalIgnoreCase) ||
@@ -1394,6 +1486,7 @@ namespace ZeoCore
             double score = 0;
             if (t.IsDistress) score += 250000;
             if (t.Focused) score += 100000;
+            if (t.AttackTarget) score += 80000;
             if (t.Source == HudTrackSource.WeaponCore) score += 20000;
             if ((t.Relation ?? "").Equals("hostile", StringComparison.OrdinalIgnoreCase)) score += 12000;
             if (t.Source == HudTrackSource.FleetContact) score += 5000;
@@ -1528,6 +1621,7 @@ namespace ZeoCore
 
         public void Dispose()
         {
+            DisposeTargets();
             try { ZeoNativeSettingsUi.Close(); } catch { }
             try { if (_distress != null) _distress.Dispose(); } catch { }
             try { _spectrum.Dispose(); } catch { }

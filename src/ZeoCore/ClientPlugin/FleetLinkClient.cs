@@ -247,8 +247,8 @@ namespace ZeoCore
                 if (!ReadVector(row, "velocity", out velocity)) velocity = Vector3D.Zero;
 
                 long reporterSourceId = ReadLong(row, "sourceId");
-                long id = ReadLong(row, "id");
-                if (id == 0) id = reporterSourceId;
+                long id = NetworkTrackIdentity.Resolve(ReadLong(row,"id"),ReadLong(row,"entityId"),ReadLong(row,"rawEmitterId"),reporterSourceId,friendly);
+                if(id==0)continue; // A contact without identity must never become its reporter's ship.
 
                 // A live fleet member must be the reporting/piloted grid itself.
                 // This rejects legacy replicated-friendly rows where pilot A reported
@@ -274,9 +274,10 @@ namespace ZeoCore
                 HudTrackSource actualSource = signal ? HudTrackSource.FleetSignal : source;
                 string relation = friendly ? "friendly" : (ReadString(row, "relation") ?? "unknown");
                 relation = relation.Trim().ToLowerInvariant();
+                if (relation == "enemy") relation="hostile";
                 if (relation == "signal") relation = "unknown";
                 if (relation != "friendly" && relation != "hostile" && relation != "unknown" &&
-                    relation != "ordnance" && relation != "wreck" && relation != "debris")
+                    relation != "neutral" && relation != "ordnance" && relation != "wreck" && relation != "debris")
                     relation = "unknown";
                 bool resolvedFriendly = friendly || relation == "friendly";
 

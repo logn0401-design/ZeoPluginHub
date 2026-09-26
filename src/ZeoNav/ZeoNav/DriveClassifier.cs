@@ -6,6 +6,12 @@ namespace ZeoNav
     {
         // Definition family matching covers sizes, factions, industrial/civilian
         // variants and damaged variants. Pilot-assigned block names are not identity.
+        public static bool IsRcs(string definition, string displayName, double ratedThrust)
+        {
+            if (IsMain(definition, displayName, ratedThrust)) return false;
+            string text = ((definition ?? "") + " " + (displayName ?? "")).ToLowerInvariant();
+            return text.Contains("rcs") || text.Contains("reaction control");
+        }
         public static bool IsMain(string definition, string displayName, double ratedThrust)
         {
             string id = (definition ?? "").ToLowerInvariant();

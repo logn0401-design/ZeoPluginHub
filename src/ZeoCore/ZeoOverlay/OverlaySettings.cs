@@ -15,6 +15,8 @@ namespace ZeoOverlay
         public int SchemaVersion { get; set; }
         public int Profile { get; set; }
         public int MenuKey { get; set; }
+        // Null preserves the existing five-key setting; zero explicitly disables it.
+        public int? MenuKeyCode { get; set; }
         public int MenuPage { get; set; }
         public int MarkerStyle { get; set; } = 3;
         public int ScopeSort { get; set; } = 1;
@@ -44,6 +46,14 @@ namespace ZeoOverlay
         public bool RefillAmmo { get; set; } = true;
         public bool RefillTanks { get; set; } = true;
         public bool RefillUnloadOtherCargo { get; set; } = false;
+        public bool TargetMarksEnabled { get; set; }
+        public bool TargetMarksAlliance { get; set; }
+        public bool TargetMarkPulse { get; set; } = true;
+        public int RefillMovesPerPass { get; set; } = 4;
+        public double RefillUnitsPerTransfer { get; set; } = 10000000;
+        public int TargetMarkKey { get; set; }
+        public int TargetMarkModifier { get; set; } = 1;
+        public double MarkerPreviewDistanceKm { get; set; } = 2;
         public int QuickRefillKey { get; set; }
         public int QuickRefillModifier { get; set; } = 1;
         // ZEOCORE_V067H4_AMMO_TYPE_VISIBILITY
@@ -100,6 +110,8 @@ namespace ZeoOverlay
         public bool ShareWeaponCoreContacts { get; set; } = true;
         public bool ShareSpectrumSignals { get; set; } = true;
         public bool SharedTacticalNoRangeLimit { get; set; } = true;
+        public int MaxSharedTracks { get; set; } = 96;
+        public double MaxSharedTrackDistanceKm { get; set; } = 0;
         public bool ProjectCrossSectorDistress { get; set; } = true;
         public bool ShowHostiles { get; set; } = true;
         public bool ShowNeutrals { get; set; }
@@ -156,8 +168,18 @@ namespace ZeoOverlay
         public string HudPanelColor { get; set; } = "#101419";
         public string HudBorderColor { get; set; } = "#7B858E";
         public string CrosshairColor { get; set; } = "#D3D8DD";
+        public double ShipBoxTextScale { get; set; } = 1;
+        public double ScopeBoxTextScale { get; set; } = 1;
+        public double FleetBoxTextScale { get; set; } = 1;
+        public double AmmoBoxTextScale { get; set; } = 1;
+        public double RosterBoxTextScale { get; set; } = 1;
+        public double DistressBoxTextScale { get; set; } = 1;
+        public int FriendlyMarkerRevision { get; set; } = 0;
+        public double SharedMarkerScale { get; set; } = 1;
+        public double SharedIdScale { get; set; } = 1;
+        public string SharedTrackColor { get; set; } = "#BC9CFF";
         public string SpectrumColor { get; set; } = "#FFB84A";
-        public string FriendlyColor { get; set; } = "#4DE1FF";
+        public string FriendlyColor { get; set; } = "#2EAB33";
         public string HostileColor { get; set; } = "#FF5A5F";
         public string NeutralColor { get; set; } = "#B48CFF";
         public string StaleColor { get; set; } = "#70879A";
@@ -248,6 +270,13 @@ namespace ZeoOverlay
 
         private sealed class UiExtension
         {
+            public double? ShipBoxTextScale { get; set; }
+            public double? ScopeBoxTextScale { get; set; }
+            public double? FleetBoxTextScale { get; set; }
+            public double? AmmoBoxTextScale { get; set; }
+            public double? RosterBoxTextScale { get; set; }
+            public double? DistressBoxTextScale { get; set; }
+
         public double ShipHudWidth { get; set; } = 1;
         public double ShipHudHeight { get; set; } = 1;
         public double ScopeHudWidth { get; set; } = 1;
@@ -302,6 +331,13 @@ namespace ZeoOverlay
                 }
                 UiExtension x = Json.Deserialize<UiExtension>(File.ReadAllText(p));
                 if (x == null) return;
+                if(x.ShipBoxTextScale.HasValue)ShipBoxTextScale=SafeBoxText(x.ShipBoxTextScale.Value);
+                if(x.ScopeBoxTextScale.HasValue)ScopeBoxTextScale=SafeBoxText(x.ScopeBoxTextScale.Value);
+                if(x.FleetBoxTextScale.HasValue)FleetBoxTextScale=SafeBoxText(x.FleetBoxTextScale.Value);
+                if(x.AmmoBoxTextScale.HasValue)AmmoBoxTextScale=SafeBoxText(x.AmmoBoxTextScale.Value);
+                if(x.RosterBoxTextScale.HasValue)RosterBoxTextScale=SafeBoxText(x.RosterBoxTextScale.Value);
+                if(x.DistressBoxTextScale.HasValue)DistressBoxTextScale=SafeBoxText(x.DistressBoxTextScale.Value);
+
                 ShipHudWidth=HudLayoutState.SafeSize(x.ShipHudWidth);
                 ShipHudHeight=HudLayoutState.SafeSize(x.ShipHudHeight);
                 ScopeHudWidth=HudLayoutState.SafeSize(x.ScopeHudWidth);
@@ -340,6 +376,13 @@ namespace ZeoOverlay
                 if (string.IsNullOrWhiteSpace(p)) return;
                 var x = new UiExtension
                 {
+                    ShipBoxTextScale=SafeBoxText(ShipBoxTextScale),
+                    ScopeBoxTextScale=SafeBoxText(ScopeBoxTextScale),
+                    FleetBoxTextScale=SafeBoxText(FleetBoxTextScale),
+                    AmmoBoxTextScale=SafeBoxText(AmmoBoxTextScale),
+                    RosterBoxTextScale=SafeBoxText(RosterBoxTextScale),
+                    DistressBoxTextScale=SafeBoxText(DistressBoxTextScale),
+
                     ShipHudWidth=HudLayoutState.SafeSize(ShipHudWidth),
                     ShipHudHeight=HudLayoutState.SafeSize(ShipHudHeight),
                     ScopeHudWidth=HudLayoutState.SafeSize(ScopeHudWidth),
@@ -417,37 +460,37 @@ namespace ZeoOverlay
             if (preset == 1)
             {
                 HudTextColor="#D8D8D8"; HudSecondaryColor="#A5A5A5"; HudPanelColor="#272727"; HudBorderColor="#686868";
-                CrosshairColor="#D8D8D8"; SpectrumColor="#D8D8D8"; FriendlyColor="#C6C6C6"; HostileColor="#F0F0F0"; NeutralColor="#B8B8B8"; StaleColor="#777777"; FocusColor="#FFFFFF";
+                CrosshairColor="#D8D8D8"; SpectrumColor="#D8D8D8"; FriendlyColor="#2EAB33"; HostileColor="#F0F0F0"; NeutralColor="#B8B8B8"; StaleColor="#777777"; FocusColor="#FFFFFF";
                 MenuBackgroundColor="#1F1F1F"; MenuPanelColor="#292929"; MenuTextColor="#D8D8D8"; MenuAccentColor="#A8A8A8";
             }
             else if (preset == 2)
             {
                 HudTextColor="#E3D6B0"; HudSecondaryColor="#B5A77E"; HudPanelColor="#2D2A24"; HudBorderColor="#746A50";
-                CrosshairColor="#E3D6B0"; SpectrumColor="#D8BE76"; FriendlyColor="#A8D0A2"; HostileColor="#E48168"; NeutralColor="#D8BE76"; StaleColor="#817864"; FocusColor="#F1D88C";
+                CrosshairColor="#E3D6B0"; SpectrumColor="#D8BE76"; FriendlyColor="#2EAB33"; HostileColor="#E48168"; NeutralColor="#D8BE76"; StaleColor="#817864"; FocusColor="#F1D88C";
                 MenuBackgroundColor="#211F1A"; MenuPanelColor="#2B2923"; MenuTextColor="#E3D6B0"; MenuAccentColor="#C1AE75";
             }
             else if (preset == 3)
             {
                 HudTextColor="#E8ECF1"; HudSecondaryColor="#B8BEC5"; HudPanelColor="#101419"; HudBorderColor="#7B858E";
-                CrosshairColor="#D3D8DD"; SpectrumColor="#FFB84A"; FriendlyColor="#4DE1FF"; HostileColor="#FF5A5F"; NeutralColor="#B48CFF"; StaleColor="#70879A"; FocusColor="#FFE16B";
+                CrosshairColor="#D3D8DD"; SpectrumColor="#FFB84A"; FriendlyColor="#2EAB33"; HostileColor="#FF5A5F"; NeutralColor="#B48CFF"; StaleColor="#70879A"; FocusColor="#FFE16B";
                 MenuBackgroundColor="#101419"; MenuPanelColor="#1A2026"; MenuTextColor="#E8ECF1"; MenuAccentColor="#F2C94C";
             }
             else if (preset == 5)
             {
                 HudTextColor="#F1F3F5"; HudSecondaryColor="#9CA3AB"; HudPanelColor="#090B0E"; HudBorderColor="#414850";
-                CrosshairColor="#E9ECEF"; SpectrumColor="#FFB84A"; FriendlyColor="#B8D7E8"; HostileColor="#F04444"; NeutralColor="#F1F3F5"; StaleColor="#5E6670"; FocusColor="#FFFFFF";
+                CrosshairColor="#E9ECEF"; SpectrumColor="#FFB84A"; FriendlyColor="#2EAB33"; HostileColor="#F04444"; NeutralColor="#F1F3F5"; StaleColor="#5E6670"; FocusColor="#FFFFFF";
                 MenuBackgroundColor="#07090B"; MenuPanelColor="#111419"; MenuTextColor="#F1F3F5"; MenuAccentColor="#D52B2B";
             }
             else if (preset == 6) // KEEN NATIVE // ZEOCORE_V13B_KEEN_NATIVE_THEME
             {
                 HudTextColor="#D9E6EA"; HudSecondaryColor="#91A6AE"; HudPanelColor="#26333B"; HudBorderColor="#607781";
-                CrosshairColor="#C9DADF"; SpectrumColor="#A7C7D0"; FriendlyColor="#8FCAD7"; HostileColor="#D86A65"; NeutralColor="#AAB9BE"; StaleColor="#6E8087"; FocusColor="#DCECF0";
+                CrosshairColor="#C9DADF"; SpectrumColor="#A7C7D0"; FriendlyColor="#2EAB33"; HostileColor="#D86A65"; NeutralColor="#AAB9BE"; StaleColor="#6E8087"; FocusColor="#DCECF0";
                 MenuBackgroundColor="#1B2931"; MenuPanelColor="#263740"; MenuTextColor="#D9E6EA"; MenuAccentColor="#91B5C0";
             }
             else if (preset == 0)
             {
                 HudTextColor="#D7D9DC"; HudSecondaryColor="#A9ADB2"; HudPanelColor="#2B2E32"; HudBorderColor="#666C72";
-                CrosshairColor="#D7D9DC"; SpectrumColor="#D7A04B"; FriendlyColor="#8FD3B0"; HostileColor="#E07872"; NeutralColor="#D0C187"; StaleColor="#7E858B"; FocusColor="#E6D28A";
+                CrosshairColor="#D7D9DC"; SpectrumColor="#D7A04B"; FriendlyColor="#2EAB33"; HostileColor="#E07872"; NeutralColor="#D0C187"; StaleColor="#7E858B"; FocusColor="#E6D28A";
                 MenuBackgroundColor="#202327"; MenuPanelColor="#2A2E33"; MenuTextColor="#D7D9DC"; MenuAccentColor="#AEB5BC";
             }
             Save();
@@ -458,8 +501,14 @@ namespace ZeoOverlay
             try { return ColorTranslator.FromHtml(hex); } catch { return fallback; }
         }
 
+        private static double SafeBoxText(double v){return double.IsNaN(v)||double.IsInfinity(v)?1:Math.Max(.6,Math.Min(3,v));}
         private void Normalize()
         {
+            RefillMovesPerPass=Math.Max(1,Math.Min(8,RefillMovesPerPass));
+            RefillUnitsPerTransfer=double.IsNaN(RefillUnitsPerTransfer)||double.IsInfinity(RefillUnitsPerTransfer)?10000000:Math.Max(1,Math.Min(10000000,RefillUnitsPerTransfer));
+            TargetMarkKey=QuickRefillBinding.NormalizeKey(TargetMarkKey);
+            TargetMarkModifier=QuickRefillBinding.NormalizeModifier(TargetMarkModifier);
+            MarkerPreviewDistanceKm=double.IsNaN(MarkerPreviewDistanceKm)||double.IsInfinity(MarkerPreviewDistanceKm)?2:Math.Max(0,Math.Min(100,MarkerPreviewDistanceKm));
             QuickRefillKey=QuickRefillBinding.NormalizeKey(QuickRefillKey);
             QuickRefillModifier=QuickRefillBinding.NormalizeModifier(QuickRefillModifier);
             PanelOpacity = Math.Max(60, Math.Min(245, PanelOpacity));
@@ -486,12 +535,23 @@ namespace ZeoOverlay
             ThemePreset = Math.Max(0, Math.Min(6, ThemePreset));
             MaxFriendlyMarkers = Math.Max(1, Math.Min(24, MaxFriendlyMarkers));
             MaxContactMarkers = Math.Max(1, Math.Min(40, MaxContactMarkers));
+            MaxSharedTracks=Math.Max(0,Math.Min(192,MaxSharedTracks));
+            MaxSharedTrackDistanceKm=double.IsNaN(MaxSharedTrackDistanceKm)||double.IsInfinity(MaxSharedTrackDistanceKm)?0:Math.Max(0,Math.Min(1000000,MaxSharedTrackDistanceKm));
             TacticalProcessingCap = Math.Max(24, Math.Min(192, TacticalProcessingCap));
             TextScale = Clamp(TextScale,.65,2.5); FlightScale=Clamp(FlightScale,.6,2.25); ScopePanelScale=Clamp(ScopePanelScale,.6,2.25); ScopeTextScale=Clamp(ScopeTextScale,.6,2.5); ScopeWidthScale=Clamp(ScopeWidthScale,.75,2.5); LinkPanelScale=Clamp(LinkPanelScale,.6,2.25);
             SpectrumMarkerScale=Clamp(SpectrumMarkerScale,.5,3); SpectrumIdScale=Clamp(SpectrumIdScale,.5,3); FriendlyMarkerScale=Clamp(FriendlyMarkerScale,.5,3); FriendlyIdScale=Clamp(FriendlyIdScale,.5,3);
-            HostileMarkerScale=Clamp(HostileMarkerScale,.5,3); FocusMarkerScale=Clamp(FocusMarkerScale,.5,3); OffscreenMarkerScale=Clamp(OffscreenMarkerScale,.5,3); MaxMarkerScale=Clamp(MaxMarkerScale,.50,1.0); CrosshairScale=Clamp(CrosshairScale,.5,3);
+            HostileMarkerScale=Clamp(HostileMarkerScale,.5,3); FocusMarkerScale=Clamp(FocusMarkerScale,.5,3); OffscreenMarkerScale=Clamp(OffscreenMarkerScale,.5,3); MaxMarkerScale=Clamp(MaxMarkerScale,.50,3.0); CrosshairScale=Clamp(CrosshairScale,.5,3);
             PanelPaddingScale=Clamp(PanelPaddingScale,.6,2); BorderWidth=Clamp(BorderWidth,.5,4); PredictionLimitSeconds=Clamp(PredictionLimitSeconds,.1,2.5); AmmoPanelScale=Clamp(AmmoPanelScale,.6,2.25); RosterPanelScale=Clamp(RosterPanelScale,.6,2.25);
             DistressColor = SafeHex(DistressColor, "#FF3B30");
+            SharedTrackColor = SafeHex(SharedTrackColor, "#BC9CFF");
+            if(FriendlyMarkerRevision<1){FriendlyColor="#2EAB33";FriendlyMarkerRevision=1;}
+            ShipBoxTextScale = SafeBoxText(ShipBoxTextScale);
+            ScopeBoxTextScale = SafeBoxText(ScopeBoxTextScale);
+            FleetBoxTextScale = SafeBoxText(FleetBoxTextScale);
+            AmmoBoxTextScale = SafeBoxText(AmmoBoxTextScale);
+            RosterBoxTextScale = SafeBoxText(RosterBoxTextScale);
+            DistressBoxTextScale = SafeBoxText(DistressBoxTextScale);
+            SharedMarkerScale=SafeBoxText(SharedMarkerScale); SharedIdScale=SafeBoxText(SharedIdScale);
         }
         private static string SafeHex(string value,string fallback)
         {

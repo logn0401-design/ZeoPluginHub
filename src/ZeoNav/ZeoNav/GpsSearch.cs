@@ -8,9 +8,9 @@ namespace ZeoNav
     {
         internal static List<GpsDto> Filter(IEnumerable<GpsDto> source, string query)
         {
-            string[] words = (query ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            string prefix = (query ?? "").Trim();
             return (source ?? Enumerable.Empty<GpsDto>()).Where(g => g != null &&
-                words.All(word => (g.Name ?? "").IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+                (g.Name ?? "").StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
         }
         // Coordinates distinguish duplicate names; changing distance does not change identity.
         internal static bool Same(GpsDto a, GpsDto b)

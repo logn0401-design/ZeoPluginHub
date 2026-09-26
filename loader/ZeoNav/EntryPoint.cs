@@ -1,19 +1,15 @@
 using System.Collections.Generic;
 using System.Reflection;
 using VRage.Plugins;
-
-[assembly: AssemblyVersion("1.0.3.0")]
-[assembly: AssemblyFileVersion("1.0.3.0")]
-
-namespace Zeo.PulsarCatalog.Nav
-{
-    public sealed class EntryPoint : IPlugin
-    {
-        private readonly ZeoNav.Plugin nav = new ZeoNav.Plugin();
-        public void LoadAssets(IReadOnlyDictionary<string, string> assets) { nav.LoadAssets(assets); }
-        public void Init(object gameInstance) { nav.Init(gameInstance); }
-        public void Update() { nav.Update(); }
-        public void Dispose() { nav.Dispose(); }
-        public void OpenConfigDialog() { nav.OpenConfigDialog(); }
+[assembly: AssemblyVersion("1.1.15.0")]
+[assembly: AssemblyFileVersion("1.1.15.0")]
+namespace Zeo.PulsarCatalog {
+    public sealed class EntryPoint : IPlugin {
+        private readonly ZeoNav.Plugin plugin = new ZeoNav.Plugin();
+        public void LoadAssets(IReadOnlyDictionary<string,string> assets) { plugin.LoadAssets(assets); }
+        public void Init(object gameInstance) { plugin.Init(gameInstance); }
+        public void Update() { plugin.Update(); }
+        public void Dispose() { plugin.Dispose(); }
+        public void OpenConfigDialog() { plugin.OpenConfigDialog(); }
     }
 }

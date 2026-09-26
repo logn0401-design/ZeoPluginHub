@@ -54,7 +54,7 @@ namespace ZeoCore
                 originAlign:MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,openAreaItemsCount:6);
             for(int i=0;i<HudLayoutState.Ids.Length;i++) _select.AddItem(i,HudLayoutState.Names[i]);
             _select.SelectItemByKey(0);
-            _select.ItemSelected+=delegate { int index=(int)_select.GetSelectedKey(); if(index>=0 && index<6) { _layout.Selected=HudLayoutState.Ids[index]; _placeSelected=true; _drag=null; } };
+            _select.ItemSelected+=delegate { int index=(int)_select.GetSelectedKey(); if(index>=0 && index<HudLayoutState.Ids.Length) { _layout.Selected=HudLayoutState.Ids[index]; _placeSelected=true; _drag=null; } };
             Controls.Add(_select);
             Button(-.085f,-.386f,.145f,"RESET SIZE",delegate {
                 var p=_layout.Panels.First(x=>x.Id==_layout.Selected); p.WidthScale=1; p.HeightScale=1; p.Resized=true; _drag=null;

@@ -573,6 +573,19 @@ namespace ZeoCore
             lock (_hudSync) _hudSnapshot = next;
         }
 
+        // Called on the game thread during bounded HUD fusion; reuses the tactical group cache.
+        internal long? TryResolveHudTrackIdentity(long entityId)
+        {
+            if(entityId==0||MyAPIGateway.Entities==null)return null;
+            try {
+                IMyEntity entity;if(!MyAPIGateway.Entities.TryGetEntityById(entityId,out entity)||entity==null)return null;
+                var grid=entity as IMyCubeGrid;var block=entity as IMyCubeBlock;if(grid==null&&block!=null)grid=block.CubeGrid;
+                if(grid==null)return entityId;
+                bool detached;var canonical=CanonicalizeTargetGrid(grid,MyAPIGateway.Session.GameplayFrameCounter,out detached);
+                return canonical==null?grid.EntityId:canonical.EntityId;
+            }catch{return null;}
+        }
+
         private IMyCubeGrid CanonicalizeTargetGrid(IMyCubeGrid grid, int frame, out bool suppressDetached)
         {
             suppressDetached = false;
@@ -991,6 +1004,7 @@ namespace ZeoCore
 
             SectorSnapshot sector = SectorIdentity.Capture();
             var self = BuildSelfRow(grid, frame, _incoming.Count);
+            self["inboundPositions"] = _incoming.Where(v => !double.IsNaN(v.X) && !double.IsNaN(v.Y) && !double.IsNaN(v.Z) && !double.IsInfinity(v.X) && !double.IsInfinity(v.Y) && !double.IsInfinity(v.Z)).Take(128).Select(v => new double[]{v.X,v.Y,v.Z}).ToArray();
             self["sectorId"] = sector.Id;
             self["sectorName"] = sector.Name;
             self["sectorKnown"] = sector.Known;

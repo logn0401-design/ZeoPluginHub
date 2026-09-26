@@ -55,7 +55,7 @@ namespace ZeosOreHelper
         private readonly Plugin host;
         private readonly OreUiModel _model;
         private OreMenuBinding _binding; private Action _pollBinding;
-        internal bool BindingActive {get{return _binding!=null && _binding.Editing;}}
+        internal bool BindingActive {get{return FocusedControl is MyGuiControlTextbox || (_binding!=null && _binding.Editing);}}
         private readonly List<Func<bool>> _editors=new List<Func<bool>>();
         private static readonly int[] LastViews=new int[6];
         private static int LastPage;

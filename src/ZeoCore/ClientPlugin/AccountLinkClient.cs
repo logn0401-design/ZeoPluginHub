@@ -14,6 +14,8 @@ namespace ZeoCore
         public string Detail { get; set; } = "Preparing device identity";
         public bool Linked { get; set; }
         public bool Authorized { get; set; }
+        public string VerifiedSteamId { get; set; }
+        public string VerifiedIdentityId { get; set; }
         public string PairingCode { get; set; } = "";
         public long PairingExpiresUtcMs { get; set; }
         public string Username { get; set; } = "";
@@ -51,6 +53,8 @@ namespace ZeoCore
         private int _lastFrame = -100000;
         private long _nextAttemptUtcMs;
         private int _errorStreak;
+        private volatile bool _disposed;
+        private HttpWebRequest _activeRequest;
 
         public AccountLinkClient(ZeoConfig config)
         {
@@ -88,6 +92,7 @@ namespace ZeoCore
 
         public void Update(int frame, ServerTrustSnapshot trust, ulong steamId, long seIdentityId, string displayName)
         {
+            if(_disposed)return;
             // v0.5.9: account/device authorization is intentionally independent from recurring DX verification.
             // The website binds this device to the signed-in Zeo/Discord account.
             // After faction approval, telemetry, shared tactical receive and distress use
@@ -125,11 +130,13 @@ namespace ZeoCore
         {
             try
             {
+                if(_disposed)return;
                 HttpResult context = Post("/v1/zeo/device/context", new Dictionary<string, object>
                 {
                     { "device_id", _deviceId },
                     { "device_key", _deviceKey }
                 });
+                if(_disposed)return;
 
                 if (context.Status >= 200 && context.Status < 300)
                 {
@@ -196,6 +203,7 @@ namespace ZeoCore
             finally
             {
                 Interlocked.Exchange(ref _inFlight, 0);
+                lock(_sync)_activeRequest=null;
             }
         }
 
@@ -279,6 +287,8 @@ namespace ZeoCore
                     : "Device linked; waiting for faction approval";
                 _snapshot.Linked = true;
                 _snapshot.Authorized = authorized;
+                _snapshot.VerifiedSteamId=currentSteamId.ToString();
+                _snapshot.VerifiedIdentityId=currentIdentityId.ToString();
                 _snapshot.PairingCode = "";
                 _snapshot.PairingExpiresUtcMs = 0;
                 _snapshot.Username = ReadString(body, "username") ?? "";
@@ -356,6 +366,7 @@ namespace ZeoCore
             req.ReadWriteTimeout = 6000;
             req.KeepAlive = true;
             req.AllowAutoRedirect = false;
+            lock(_sync){if(_disposed)throw new ObjectDisposedException("AccountLink");_activeRequest=req;}
             using (Stream st = req.GetRequestStream()) st.Write(bytes, 0, bytes.Length);
 
             try
@@ -434,7 +445,7 @@ namespace ZeoCore
             return value.Length <= 180 ? value : value.Substring(0, 180);
         }
 
-        public void Dispose() { }
+        public void Dispose() {lock(_sync){_disposed=true;_activeRequest?.Abort();}}
 
         private sealed class HttpResult
         {

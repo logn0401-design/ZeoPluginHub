@@ -21,7 +21,19 @@ namespace ZeoNavOverlay
         // Increment when a new field needs an explicit upgrade default. DataContract
         // deserialization does not apply field initializers to members missing from an
         // older config file, so this protects one-click upgrades that preserve config.json.
-        [DataMember] public int ConfigVersion = 7;
+        [DataMember] public int ConfigVersion = 15;
+        [DataMember] public string TargetSelectKey="None", TargetCycleKey="None", InterceptKey="None", MatchVelocityKey="None";
+        [DataMember] public double InterceptStandOffKm=5;
+        [DataMember] public bool MatchKeep=true, MatchRcsOnly=false;
+        [DataMember] public bool TargetCtrlAim=true;
+        [DataMember] public bool RcsTurnAssist=true;
+        [DataMember] public string QuickDockKey = "None", RefuelKey = "None";
+        [DataMember] public double DockScanMeters = 500, DockStandOffMeters = 50, DockApproachMps = 1, DockTransitMps = 6;
+        [DataMember] public bool RefuelAfterDock = false;
+        [DataMember] public bool ApproachSigEnabled = false;
+        [DataMember] public double ApproachSigKm = 75, ApproachDistanceKm = 100;
+        [DataMember] public bool DepartureSigEnabled = false;
+        [DataMember] public double DepartureSigKm = 75, DepartureDistanceKm = 100;
 
         [DataMember] public string MenuKey = "Insert";
         [DataMember] public string StartKey = "None";
@@ -118,6 +130,8 @@ namespace ZeoNavOverlay
         [DataMember] public double RouteStartDistanceMeters;
         [DataMember] public double BufferMeters;
         [DataMember] public double SpeedMps;
+        [DataMember] public double ApiSpeedMps,MeasuredSpeedMps;
+        [DataMember] public string VelocitySource;
         [DataMember] public double CommandSpeedMps;
         [DataMember] public double SpeedCapMps;
         [DataMember] public string SpeedCapSource;
@@ -132,6 +146,12 @@ namespace ZeoNavOverlay
         [DataMember] public double MaxDriveSigKm;
         [DataMember] public bool SpectrumKmReady;
         [DataMember] public string SpectrumKmSource;
+        [DataMember] public bool TargetSelecting, TargetLocked, TargetMarkerVisible;
+        [DataMember] public double TargetPointerX,TargetPointerY;
+        [DataMember] public bool TargetPointerFree;
+        [DataMember] public int TargetCursorState;
+        [DataMember] public double TargetMarkerX,TargetMarkerY,TargetDistance,TargetRelativeSpeed;
+        [DataMember] public string TargetLabel, TargetStatus;
         [DataMember] public string SignalGovernorState;
         [DataMember] public bool SpectrumReady;
         [DataMember] public long SpectrumSelfEmitterId;
@@ -209,6 +229,5 @@ namespace ZeoNavOverlay
         }
     }
 }
-
 
 

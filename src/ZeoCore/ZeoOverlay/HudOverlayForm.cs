@@ -17,6 +17,9 @@ namespace ZeoOverlay
 {
     internal sealed partial class HudOverlayForm : Form
     {
+        private readonly Zeo.Performance.LayeredSurface _surface = new Zeo.Performance.LayeredSurface();
+        protected override void Dispose(bool disposing) { if(disposing){DisposeTextCache();_surface.Dispose();}base.Dispose(disposing); }
+
         private const int HotkeyId = 0x5A40;
         private readonly OverlaySettings _settings;
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = 8 * 1024 * 1024 };
@@ -428,7 +431,7 @@ namespace ZeoOverlay
             int height = rect.Bottom - rect.Top;
             if (width < 200 || height < 200) return;
 
-            using (var bitmap = new Bitmap(width, height, PixelFormat.Format32bppPArgb))
+            var bitmap = _surface.GetBitmap(width,height);
             using (var g = Graphics.FromImage(bitmap))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -436,6 +439,7 @@ namespace ZeoOverlay
                 g.CompositingMode = CompositingMode.SourceOver;
                 g.Clear(Color.Transparent);
                 DrawHud(g, width, height, frame);
+                g.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);
                 Present(bitmap, rect.Left, rect.Top);
                 EnsureHudTopmost();
             }
@@ -649,53 +653,16 @@ namespace ZeoOverlay
 
         private void Present(Bitmap bitmap, int left, int top)
         {
-            IntPtr screenDc = IntPtr.Zero;
-            IntPtr memDc = IntPtr.Zero;
-            IntPtr hBitmap = IntPtr.Zero;
-            IntPtr oldBitmap = IntPtr.Zero;
-            try
-            {
-                screenDc = NativeMethods.GetDC(IntPtr.Zero);
-                memDc = NativeMethods.CreateCompatibleDC(screenDc);
-                hBitmap = bitmap.GetHbitmap(Color.FromArgb(0));
-                oldBitmap = NativeMethods.SelectObject(memDc, hBitmap);
-
-                var dst = new NativeMethods.POINT(left, top);
-                var src = new NativeMethods.POINT(0, 0);
-                var size = new NativeMethods.SIZE(bitmap.Width, bitmap.Height);
-                var blend = new NativeMethods.BLENDFUNCTION
-                {
-                    BlendOp = NativeMethods.AC_SRC_OVER,
-                    BlendFlags = 0,
-                    SourceConstantAlpha = 255,
-                    AlphaFormat = NativeMethods.AC_SRC_ALPHA
-                };
-
-                bool ok = NativeMethods.UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, NativeMethods.ULW_ALPHA);
-                if (ok)
-                {
-                    NativeMethods.ShowWindow(Handle, NativeMethods.SW_SHOWNA);
-                }
-                else
-                {
-                    int err = Marshal.GetLastWin32Error();
-                    LogOverlay("UpdateLayeredWindow FAILED win32=" + err + ".");
-                }
-            }
-            finally
-            {
-                if (oldBitmap != IntPtr.Zero && memDc != IntPtr.Zero) NativeMethods.SelectObject(memDc, oldBitmap);
-                if (hBitmap != IntPtr.Zero) NativeMethods.DeleteObject(hBitmap);
-                if (memDc != IntPtr.Zero) NativeMethods.DeleteDC(memDc);
-                if (screenDc != IntPtr.Zero) NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
-            }
+            if(_surface.Present(Handle,left,top))NativeMethods.ShowWindow(Handle,NativeMethods.SW_SHOWNA);
+            else { HideOverlay(); LogOverlay("UpdateLayeredWindow FAILED win32="+Marshal.GetLastWin32Error()); }
         }
 
         private void DrawHud(Graphics g, int width, int height, OverlayFrame frame)
         {
             if(frame.Layout!=null) { DrawLayoutPreview(g,width,height,frame); return; }
-            if (_settings.ShowDistressBanner && (frame.DistressLocalActive || (frame.DistressAlerts != null && frame.DistressAlerts.Count > 0)))
+            if (_settings.ShowDistressBanner)
                 DrawDistressBanner(g, width, height, frame);
+
 
             if (!frame.HasShip)
             {
@@ -813,7 +780,7 @@ namespace ZeoOverlay
                 float y0 = rect.Y + pad;
                 string shipName = ShortName(string.IsNullOrWhiteSpace(frame.OwnGridName) ? "SHIP STATUS" : frame.OwnGridName, two ? 100 : 80);
                 SizeF shipTitle = g.MeasureString(shipName, titleFont);
-                DrawFitted(g,shipName,titleFont,pBrush,new RectangleF(rect.X+pad,y0,rect.Width-pad*2,titleFont.Height));
+                DrawCenteredFitted(g,shipName,titleFont,pBrush,new RectangleF(rect.X+pad,y0,rect.Width-pad*2,titleFont.Height+6f*scale));
                 y0 += titleFont.Height + 8f * scale;
                 rowH=Math.Max(rowH,(rect.Bottom-pad-y0)/Math.Max(1,visualRows));
                 float colGap = 14f * scale;
@@ -845,7 +812,7 @@ namespace ZeoOverlay
                     else
                     {
                         g.DrawString("SPD", font, sBrush, x, y + 2f * scale);
-                        DrawFitted(g,frame.Speed.ToString("0.0")+" m/s",font,pBrush,new RectangleF(x+72f*scale,y,widthForItem-72f*scale,font.Height));
+                        DrawFitted(g,frame.Speed.ToString("0.0")+" m/s",font,pBrush,new RectangleF(x+72f*scale,y,widthForItem-72f*scale,rowH-4f*scale));
                     }
                 }
             }
@@ -861,7 +828,7 @@ namespace ZeoOverlay
             float barW = Math.Max(1,available - labelW - valueW - 10f * scale);
             float barY = y + Math.Max(9f, font.Height * .48f);
 
-            DrawFitted(g,label,font,secondary,new RectangleF(x,y,labelW-3,font.Height));
+            DrawFitted(g,label,font,secondary,new RectangleF(x,y,labelW-3,22f*scale));
             Color panelColor = _settings.ColorOf(_settings.HudPanelColor, Color.Black);
             Color border = _settings.ColorOf(_settings.HudBorderColor, Color.Gray);
             using (var bg = new SolidBrush(Color.FromArgb(185, panelColor)))
@@ -881,7 +848,7 @@ namespace ZeoOverlay
 
             SizeF vm = g.MeasureString(value ?? "", font);
             float valueX = x + available - vm.Width;
-            DrawFitted(g,value ?? "",font,primary,new RectangleF(x+available-valueW,y,valueW,font.Height),true);
+            DrawFitted(g,value ?? "",font,primary,new RectangleF(x+available-valueW,y,valueW,22f*scale),true);
         }
 
         private Color StatusColor(double ratio, bool highIsGood, double warningThreshold = .50, double criticalThreshold = .25)
@@ -962,7 +929,7 @@ namespace ZeoOverlay
             int rows = Math.Min(12, visibleAmmo.Count);
             float rowH = Math.Max(21f, 24f * scale);
             float panelW = Math.Max(390f, 430f * scale);
-            float panelH = pad * 2f + 28f * scale + Math.Max(2, rows) * rowH;
+            float panelH = pad * 2f + 46f * scale + Math.Max(2, rows) * rowH;
             PointF origin = NormToPixel(width, height, _settings.AmmoX, _settings.AmmoY);
             RectangleF rect = SizedPanelRectangle("ammo",width,height,origin.X,origin.Y,panelW,panelH);
             RecordLayoutBounds("ammo",rect);
@@ -980,19 +947,20 @@ namespace ZeoOverlay
                 float x = rect.X + pad;
                 float y = rect.Y + pad;
                 SizeF ammoTitle = g.MeasureString("AMMUNITION", titleFont);
-                DrawFitted(g,"AMMUNITION",titleFont,pb,new RectangleF(x,y,(rect.Width-pad*2)*.60f,titleFont.Height));
+                DrawCenteredFitted(g,"AMMUNITION",titleFont,pb,new RectangleF(x,y,rect.Width-pad*2,25f*scale));
+                y += 25f * scale;
                 string hdr = _settings.AmmoValueOrder == 1 ? "WANT / HAVE" : "HAVE / WANT";
                 SizeF hm = g.MeasureString(hdr, font);
-                if(rows>0) DrawFitted(g,hdr,font,sb,new RectangleF(x+(rect.Width-pad*2)*.62f,y,(rect.Width-pad*2)*.38f,titleFont.Height),true);
-                y += 27f * scale;
+                if(rows>0) DrawFitted(g,hdr,font,sb,new RectangleF(x+(rect.Width-pad*2)*.62f,y,(rect.Width-pad*2)*.38f,16f*scale),true);
+                y += 20f * scale;
                 rowH=Math.Max(rowH,(rect.Bottom-pad-y)/Math.Max(2,rows));
                 if (rows == 0)
                 {
-                    DrawFitted(g,AmmoEmptyMessage(frame),font,pb,new RectangleF(x,y,rect.Width-pad*2,font.Height));
+                    DrawFitted(g,AmmoEmptyMessage(frame),font,pb,new RectangleF(x,y,rect.Width-pad*2,rowH-7f*scale));
                     string hint = !frame.HasShip ? "Ammo tracking requires a controlled ship." :
                         (frame.AmmoRows != null && frame.AmmoRows.Count > 0 ? "HOME > AMMO: enable an ammo type." :
                         (_settings.AmmoOnlyRelevant ? "HOME > AMMO: turn relevant-only OFF to show all." : "Waiting for the ship inventory scan."));
-                    DrawFitted(g,hint,font,sb,new RectangleF(x,y+rowH,rect.Width-pad*2,font.Height));
+                    DrawFitted(g,hint,font,sb,new RectangleF(x,y+rowH,rect.Width-pad*2,rowH-7f*scale));
                 }
                 for (int i = 0; i < rows; i++)
                 {
@@ -1000,11 +968,11 @@ namespace ZeoOverlay
                     double ratio = a.Want > 0 ? a.Have / a.Want : 1.0;
                     Color c = StatusColor(ratio, true, .75, .40);
                     string name = _settings.AmmoNameStyle == 1 ? a.ServerName : (_settings.AmmoNameStyle == 2 ? AmmoCompact(a.CleanName) : a.CleanName);
-                    using(var cb=new SolidBrush(c)) DrawFitted(g,name,font,cb,new RectangleF(x,y,(rect.Width-pad*2)*.57f,font.Height));
+                    using(var cb=new SolidBrush(c)) DrawFitted(g,name,font,cb,new RectangleF(x,y,(rect.Width-pad*2)*.57f,rowH-7f*scale));
                     string value = _settings.AmmoValueOrder == 1 ? (a.Want.ToString("0") + " / " + a.Have.ToString("0")) : (a.Have.ToString("0") + " / " + a.Want.ToString("0"));
                     SizeF vm = g.MeasureString(value, font);
-                    DrawFitted(g,value,font,pb,new RectangleF(x+(rect.Width-pad*2)*.60f,y,(rect.Width-pad*2)*.40f,font.Height),true);
-                    float barY = y + font.Height + 1f * scale;
+                    DrawFitted(g,value,font,pb,new RectangleF(x+(rect.Width-pad*2)*.60f,y,(rect.Width-pad*2)*.40f,rowH-7f*scale),true);
+                    float barY = y + rowH - 5f * scale;
                     float barW = rect.Width - pad * 2f;
                     using (var bg = new SolidBrush(Color.FromArgb(120, _settings.ColorOf(_settings.HudPanelColor, Color.Black)))) g.FillRectangle(bg, x, barY, barW, Math.Max(2f, 3.5f*scale));
                     using (var fb = new SolidBrush(Color.FromArgb(225, c))) g.FillRectangle(fb, x, barY, barW * (float)Math.Max(0, Math.Min(1, ratio)), Math.Max(2f, 3.5f*scale));
@@ -1064,7 +1032,7 @@ namespace ZeoOverlay
             float pad = 11f * (float)_settings.PanelPaddingScale * scale;
             float rowH = Math.Max(19f, 22f * scale);
             float panelW = Math.Max(380f, 445f * scale);
-            float panelH = pad * 2f + Math.Max(18f, 22f * scale) + 8f * scale + Math.Max(1, _settings.RosterRows) * rowH;
+            float panelH = pad * 2f + 45f * scale + Math.Max(1, _settings.RosterRows) * rowH;
             PointF origin = NormToPixel(width, height, _settings.RosterX, _settings.RosterY);
             RectangleF rect = SizedPanelRectangle("roster",width,height,origin.X,origin.Y,panelW,panelH);
             RecordLayoutBounds("roster",rect);
@@ -1084,17 +1052,18 @@ namespace ZeoOverlay
                 float x = rect.X + pad;
                 float y = rect.Y + pad;
                 SizeF rosterTitle = g.MeasureString("FLEET ROSTER", titleFont);
-                DrawFitted(g,"FLEET ROSTER",titleFont,pb,new RectangleF(x,y,(rect.Width-pad*2)*.52f,titleFont.Height));
+                DrawCenteredFitted(g,"FLEET ROSTER",titleFont,pb,new RectangleF(x,y,rect.Width-pad*2,25f*scale));
+                y += 25f * scale;
                 string sector = ShortName(frame.SectorName ?? "UNKNOWN SECTOR", 24);
                 SizeF sm = g.MeasureString(sector, font);
-                DrawFitted(g,frame.SectorName ?? "UNKNOWN SECTOR",font,sb,new RectangleF(x+(rect.Width-pad*2)*.54f,y,(rect.Width-pad*2)*.46f,titleFont.Height),true);
-                y += titleFont.Height + 7f * scale;
+                DrawCenteredFitted(g,frame.SectorName ?? "UNKNOWN SECTOR",font,sb,new RectangleF(x,y,rect.Width-pad*2,16f*scale));
+                y += 20f * scale;
                 rowH=Math.Max(rowH,(rect.Bottom-pad-y)/Math.Max(1,_settings.RosterRows));
 
                 if (count == 0)
                 {
                     string waiting = frame.RxLinked ? "NO SERVER ROSTER ROWS" : "FLEETLINK WAITING";
-                    DrawFitted(g,waiting,font,sb,new RectangleF(x,y,rect.Width-pad*2,font.Height));
+                    DrawFitted(g,waiting,font,sb,new RectangleF(x,y,rect.Width-pad*2,rowH-2f*scale));
                     return;
                 }
 
@@ -1105,17 +1074,17 @@ namespace ZeoOverlay
                     if (!_settings.ShowCrossSectorRoster && !r.SameSector) continue;
                     Color distress = _settings.ColorOf(_settings.DistressColor, Color.Red);
                     Color c = r.Distress ? distress : (!r.Online || r.AgeSeconds > 20 ? stale : (r.SameSector ? accent : secondary));
-                    string icon = r.Distress ? "!" : (r.SameSector ? "◇" : (r.SectorKnown ? ">" : "?"));
+                    string icon = r.Distress ? "!" : (r.SameSector ? "â—‡" : (r.SectorKnown ? ">" : "?"));
                     string where = r.SameSector && r.Distance >= 0 ? FormatRange(r.Distance) : (r.SectorKnown ? ShortName(r.SectorName, 18) : "SECTOR ?");
                     string hp = r.ShipHp >= 0 ? (Math.Max(0, Math.Min(1, r.ShipHp)) * 100.0).ToString("0") + "%" : "--";
                     if (r.Distress && r.DistressSecondsRemaining > 0) hp = Math.Ceiling(r.DistressSecondsRemaining/60.0).ToString("0") + "m";
                     using (var cb = new SolidBrush(Color.FromArgb(!r.Online ? 145 : 240, c)))
                     {
-                        DrawFitted(g,icon+" "+r.Name,font,cb,new RectangleF(x,y,(rect.Width-pad*2)*.48f,font.Height));
+                        DrawFitted(g,icon+" "+r.Name,font,cb,new RectangleF(x,y,(rect.Width-pad*2)*.48f,rowH-2f*scale));
                         SizeF wm = g.MeasureString(where, font);
-                        DrawFitted(g,where,font,cb,new RectangleF(x+(rect.Width-pad*2)*.50f,y,(rect.Width-pad*2)*.34f,font.Height),true);
+                        DrawFitted(g,where,font,cb,new RectangleF(x+(rect.Width-pad*2)*.50f,y,(rect.Width-pad*2)*.34f,rowH-2f*scale),true);
                         SizeF hm = g.MeasureString(hp, font);
-                        DrawFitted(g,hp,font,cb,new RectangleF(x+(rect.Width-pad*2)*.86f,y,(rect.Width-pad*2)*.14f,font.Height),true);
+                        DrawFitted(g,hp,font,cb,new RectangleF(x+(rect.Width-pad*2)*.86f,y,(rect.Width-pad*2)*.14f,rowH-2f*scale),true);
                     }
                     y += rowH;
                     rendered++;
@@ -1158,22 +1127,22 @@ namespace ZeoOverlay
                     float ty = rect.Y + pad;
                     string title = "TRACKS ON SCOPE";
                     SizeF titleMeasure = g.MeasureString(title, titleFont);
-                    DrawFitted(g,title,titleFont,titleBrush,new RectangleF(rect.Left+pad,ty,(rect.Width-pad*2)*.86f,titleFont.Height));
+                    DrawCenteredFitted(g,title,titleFont,titleBrush,new RectangleF(rect.Left+pad+(rect.Width-pad*2)*.14f,ty,(rect.Width-pad*2)*.72f,titleFont.Height+4f*overall));
 
                     string countText = Math.Max(0, frame.TotalScopeCount).ToString("00");
                     SizeF countMeasure = g.MeasureString(countText, headFont);
-                    DrawFitted(g,countText,headFont,headBrush,new RectangleF(rect.Left+pad+(rect.Width-pad*2)*.88f,ty,(rect.Width-pad*2)*.12f,titleFont.Height),true);
+                    DrawFitted(g,countText,headFont,headBrush,new RectangleF(rect.Left+pad+(rect.Width-pad*2)*.88f,ty,(rect.Width-pad*2)*.12f,titleFont.Height+4f*overall),true);
 
-                    float usable = Math.Max(180f, rect.Width - pad * 2f);
+                    float usable = Math.Max(1f, rect.Width - pad * 2f);
                     float idX = rect.Left + pad;
                     float distX = idX + usable * .14f;
                     float statusX = idX + usable * .43f;
                     float coreX = idX + usable * .74f;
                     float yy = ty + titleFont.Height + 6f * overall;
-                    DrawFitted(g,"#",headFont,headBrush,new RectangleF(idX,yy,distX-idX-4,headFont.Height));
-                    DrawFitted(g,"DISTANCE",headFont,headBrush,new RectangleF(distX,yy,statusX-distX-4,headFont.Height));
-                    DrawFitted(g,"TARGET SPD",headFont,headBrush,new RectangleF(statusX,yy,coreX-statusX-4,headFont.Height));
-                    DrawFitted(g,"CORE",headFont,headBrush,new RectangleF(coreX,yy,rect.Right-pad-coreX-4,headFont.Height));
+                    DrawFitted(g,"#",headFont,headBrush,new RectangleF(idX,yy,distX-idX-4,headFont.Height+5f*overall));
+                    DrawFitted(g,"DISTANCE",headFont,headBrush,new RectangleF(distX,yy,statusX-distX-4,headFont.Height+5f*overall));
+                    DrawFitted(g,"TARGET SPD",headFont,headBrush,new RectangleF(statusX,yy,coreX-statusX-4,headFont.Height+5f*overall));
+                    DrawFitted(g,"CORE",headFont,headBrush,new RectangleF(coreX,yy,rect.Right-pad-coreX-4,headFont.Height+5f*overall));
                     yy += headFont.Height + 7f * overall;
                     lineH=Math.Max(lineH,(rect.Bottom-pad-yy)/capacity);
 
@@ -1192,6 +1161,8 @@ namespace ZeoOverlay
                             rowColor = _settings.ThemePreset == 4
                                 ? _settings.ColorOf(_settings.HostileColor, Color.Red)
                                 : Color.FromArgb(240, 68, 68);
+                        else if (r.Source == 3 || r.Source == 4)
+                            rowColor = _settings.ColorOf(_settings.SharedTrackColor, Color.MediumPurple);
                         else if (relation.Equals("neutral", StringComparison.OrdinalIgnoreCase))
                             rowColor = _settings.ThemePreset == 4
                                 ? _settings.ColorOf(_settings.NeutralColor, Color.White)
@@ -1212,10 +1183,10 @@ namespace ZeoOverlay
                             string core = r.Distress ? ("SOS " + (r.Name ?? "DISTRESS")) : (r.Name ?? "");
                             if (string.IsNullOrWhiteSpace(core)) core = "UNKNOWN";
                             // The measured column fit keeps the complete contact name.
-                            DrawFitted(g,id,bodyFont,rowBrush,new RectangleF(idX,yy,distX-idX-4,bodyFont.Height));
-                            DrawFitted(g,FormatRange(r.Distance),bodyFont,rowBrush,new RectangleF(distX,yy,statusX-distX-4,bodyFont.Height));
-                            DrawFitted(g,status,bodyFont,rowBrush,new RectangleF(statusX,yy,coreX-statusX-4,bodyFont.Height));
-                            DrawFitted(g,core,bodyFont,rowBrush,new RectangleF(coreX,yy,rect.Right-pad-coreX-4,bodyFont.Height));
+                            DrawFitted(g,id,bodyFont,rowBrush,new RectangleF(idX,yy,distX-idX-4,lineH-2f*overall));
+                            DrawFitted(g,FormatRange(r.Distance),bodyFont,rowBrush,new RectangleF(distX,yy,statusX-distX-4,lineH-2f*overall));
+                            DrawFitted(g,status,bodyFont,rowBrush,new RectangleF(statusX,yy,coreX-statusX-4,lineH-2f*overall));
+                            DrawFitted(g,core,bodyFont,rowBrush,new RectangleF(coreX,yy,rect.Right-pad-coreX-4,lineH-2f*overall));
                         }
                         yy += lineH;
                     }
@@ -1260,13 +1231,13 @@ namespace ZeoOverlay
                     if (!string.IsNullOrEmpty(title))
                     {
                         SizeF tm = g.MeasureString(title, titleFont);
-                        DrawFitted(g,title,titleFont,b1,new RectangleF(x,yy,rect.Width-pad*2-8,titleFont.Height)); // ZEOCORE_V067_CENTERED_HEADER
+                        DrawCenteredFitted(g,title,titleFont,b1,new RectangleF(x,yy,rect.Width-pad*2-8,titleFont.Height+gap)); // ZEOCORE_V067_CENTERED_HEADER
                         yy += titleFont.Height + gap;
                     }
                     lineH=Math.Max(lineH,(rect.Bottom-pad-yy)/Math.Max(1,lines.Count));
                     for (int i = 0; i < lines.Count; i++)
                     {
-                        DrawFitted(g,lines[i] ?? "",bodyFont,i==0 && mono ? b2 : b1,new RectangleF(x,yy,rect.Width-pad*2-8,bodyFont.Height));
+                        DrawFitted(g,lines[i] ?? "",bodyFont,i==0 && mono ? b2 : b1,new RectangleF(x,yy,rect.Width-pad*2-8,lineH-1));
                         yy += lineH;
                     }
                 }
@@ -1731,6 +1702,8 @@ namespace ZeoOverlay
                     ? _settings.ColorOf(_settings.HostileColor, Color.Red)
                     : Color.FromArgb(240, 68, 68);
 
+            if (r.Source == 3 || r.Source == 4) return _settings.ColorOf(_settings.SharedTrackColor, Color.MediumPurple);
+
             if (relation.Equals("neutral", StringComparison.OrdinalIgnoreCase))
                 return _settings.ThemePreset == 4
                     ? _settings.ColorOf(_settings.NeutralColor, Color.White)
@@ -1747,9 +1720,7 @@ namespace ZeoOverlay
             PointF p = raw; // v0.6.7 legacy lock: no second screen-space smoothing pass
             Color color = MarkerColor(m);
             double scale = MarkerScale(m);
-            if (m.Offscreen) scale *= _settings.OffscreenMarkerScale;
-            if (m.Focused) scale *= _settings.FocusMarkerScale;
-            scale = Math.Min(scale, _settings.MaxMarkerScale); // ZEOCORE_V067_FINAL_MARKER_CAP
+
             float sz = (float)scale;
 
             if (m.Offscreen)
@@ -1841,7 +1812,9 @@ namespace ZeoOverlay
         private void DrawDistressBanner(Graphics g, int width, int height, OverlayFrame frame)
         {
             OverlayDistressAlert d = frame.DistressAlerts != null && frame.DistressAlerts.Count > 0 ? frame.DistressAlerts[0] : null;
-            if(d==null && !frame.DistressLocalActive) return;
+            bool notice=!string.IsNullOrEmpty(frame.SosNotification)&&frame.SosNotificationExpiresMs>DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            bool active=d!=null||frame.DistressLocalActive;
+            if(!active&&!notice&&!_layoutDrawing)return;
             Color c=_settings.ColorOf(_settings.DistressColor,Color.Red);
             float scale=(float)Math.Max(.75,Math.Min(1.7,_settings.TextScale));
             float w=Math.Max(420f,520f*scale), h=Math.Max(62f,74f*scale);
@@ -1849,70 +1822,62 @@ namespace ZeoOverlay
             RecordLayoutBounds("distress",rect);
             using(BeginPanelSize(g,"distress",rect))
             {
-            using(var fill=new SolidBrush(Color.FromArgb(_settings.BackingDistress ? Math.Min(225,_settings.PanelOpacity) : 0,_settings.ColorOf(_settings.HudPanelColor,Color.Black)))) g.FillRectangle(fill,rect); // ZEOCORE_V13B_PER_PANEL_BACKINGS
-            using(var pen=new Pen(Color.FromArgb(245,c),Math.Max(1.5f,2f*scale))) g.DrawRectangle(pen,rect.X,rect.Y,rect.Width,rect.Height);
-            using(var title=new Font(HudTitleFont(),Math.Max(12f,15f*scale),FontStyle.Bold,GraphicsUnit.Pixel))
-            using(var body=new Font(HudBodyFont(true),Math.Max(9f,11f*scale),FontStyle.Bold,GraphicsUnit.Pixel))
-            using(var cb=new SolidBrush(c))
-            using(var wb=new SolidBrush(_settings.ColorOf(_settings.HudTextColor,Color.White)))
-            {
-                if(d==null)
-                {
-                    string left="! YOUR DISTRESS // ACTIVE";
-                    DrawFitted(g,left,title,cb,new RectangleF(rect.X+12f*scale,rect.Y+8f*scale,rect.Width-24f*scale,(rect.Height-16f*scale)*.45f));
-                    DrawFitted(g,(frame.DistressStatus ?? "WAITING FOR SERVER")+"   //   HOLD KEY AGAIN TO CLEAR",body,wb,new RectangleF(rect.X+12f*scale,rect.Y+rect.Height*.5f,rect.Width-24f*scale,rect.Height*.5f-8f*scale));
+                using(var fill=new SolidBrush(Color.FromArgb(_settings.BackingDistress ? Math.Min(225,_settings.PanelOpacity) : 0,_settings.ColorOf(_settings.HudPanelColor,Color.Black))))g.FillRectangle(fill,rect);
+                using(var pen=new Pen(Color.FromArgb(245,c),Math.Max(1.5f,2f*scale)))g.DrawRectangle(pen,rect.X,rect.Y,rect.Width,rect.Height);
+                string heading="DISTRESS / SOS",detail=notice?frame.SosNotification:"SEND STATUS / ACTIVE DISTRESS";
+                if(d!=null){
+                    heading="! DISTRESS // "+ShortName(d.Name,24)+" // "+ShortName(d.Type,18);
+                    string where=d.SameSector&&d.Distance>=0?FormatRange(d.Distance):ShortName(d.SectorName,24);
+                    string ttl=d.SecondsRemaining>0?Math.Ceiling(d.SecondsRemaining/60.0).ToString("0")+"m TTL":"ACTIVE";
+                    string hp=d.ShipHp>=0?"HP "+(Math.Max(0,Math.Min(1,d.ShipHp))*100).ToString("0")+"%":"HP --";
+                    detail=where+"   //   "+hp+"   //   "+ttl;
+                }else if(frame.DistressLocalActive){
+                    heading="! YOUR DISTRESS // ACTIVE";
+                    detail=(frame.DistressStatus??"WAITING FOR SERVER")+"   //   HOLD KEY AGAIN TO CLEAR";
                 }
-                else
-                {
-                    string left="! DISTRESS // "+ShortName(d.Name,24)+" // "+ShortName(d.Type,18);
-                    DrawFitted(g,left,title,cb,new RectangleF(rect.X+12f*scale,rect.Y+8f*scale,rect.Width-24f*scale,(rect.Height-16f*scale)*.45f));
-                    string where=d.SameSector && d.Distance>=0 ? FormatRange(d.Distance) : ShortName(d.SectorName,24);
-                    string ttl=d.SecondsRemaining>0 ? Math.Ceiling(d.SecondsRemaining/60.0).ToString("0")+"m TTL" : "ACTIVE";
-                    string hp=d.ShipHp>=0 ? "HP "+(Math.Max(0,Math.Min(1,d.ShipHp))*100).ToString("0")+"%" : "HP --";
-                    DrawFitted(g,where+"   //   "+hp+"   //   "+ttl,body,wb,new RectangleF(rect.X+12f*scale,rect.Y+rect.Height*.5f,rect.Width-24f*scale,rect.Height*.5f-8f*scale));
+                using(var title=new Font(HudTitleFont(),Math.Max(12f,15f*scale),FontStyle.Bold,GraphicsUnit.Pixel))
+                using(var body=new Font(HudBodyFont(true),Math.Max(9f,11f*scale),FontStyle.Bold,GraphicsUnit.Pixel))
+                using(var cb=new SolidBrush(c))
+                using(var wb=new SolidBrush(_settings.ColorOf(_settings.HudTextColor,Color.White))){
+                    float pad=8*scale,innerH=rect.Height-pad*2,titleH=innerH*.4f;
+                    DrawCenteredFitted(g,heading,title,cb,new RectangleF(rect.X+12*scale,rect.Y+pad,rect.Width-24*scale,titleH));
+                    float bodyY=rect.Y+pad+titleH,bodyH=innerH-titleH;
+                    bool footer=active&&notice;
+                    DrawFitted(g,detail,body,wb,new RectangleF(rect.X+12*scale,bodyY,rect.Width-24*scale,footer?bodyH*.5f:bodyH));
+                    // Keep active alert details visible while a send/clear result appears in the same frame.
+                    if(footer)DrawFitted(g,frame.SosNotification,body,wb,new RectangleF(rect.X+12*scale,bodyY+bodyH*.5f,rect.Width-24*scale,bodyH*.5f));
                 }
-            }
             }
         }
 
         private void DrawMarkerByIconPack(Graphics g, PointF p, OverlayMarker m, Color color, float scale)
         {
-            // ZEOCORE_V066_MARKER_DISPATCH
-            // One local combat language: classic Zeo Flight HUD reticle + persistent ID.
-            // Only friendly, shared-data and distress contacts retain dedicated shapes.
-            if (m.Distress)
-            {
-                DrawDistressMarker(g, p, m, color, scale);
-                return;
+            if(m.Distress){DrawDistressMarker(g,p,m,color,scale);return;}
+            int shape=MarkerSizing.Shape(m.Source,m.Friendly,m.Relation,m.AttackTarget&&!m.Stale);
+            if(shape==3)DrawFriendlyCircle(g,p,m,color,scale);
+            else if(shape==4)DrawClassicReticle(g,p,m,color,scale);
+            else DrawGeometricMarker(g,p,m,color,scale,shape);
+            if(m.AttackTarget&&!m.Stale)DrawAttackBrackets(g,p,color,scale);
+            if(m.AttackTarget&&!m.Stale){
+                using(var font=new Font(HudBodyFont(true),Math.Max(9,10*scale),FontStyle.Bold,GraphicsUnit.Pixel))
+                using(var brush=new SolidBrush(color))g.DrawString("ATTACK",font,brush,p.X+13*scale,p.Y-24*scale-font.Height);
             }
-
-            // FleetFriendly/source 2: keep the friendly diamond.
-            if (m.Friendly || m.Source == 2)
-            {
-                DrawGeometricMarker(g, p, m, color, scale, 0);
-                if (m.Focused) DrawFocusBrackets(g, p, color, scale);
-                return;
+        }
+        private void DrawFriendlyCircle(Graphics g,PointF p,OverlayMarker m,Color color,float scale)
+        {
+            float r=Math.Max(6f,9.5f*scale);
+            using(var pen=new Pen(Color.FromArgb(m.Stale?155:238,color),Math.Max(1.2f,1.55f*scale)))
+            using(var font=new Font(HudBodyFont(true),Math.Max(9f,12f*scale*(float)_settings.FriendlyIdScale),FontStyle.Bold,GraphicsUnit.Pixel))
+            using(var brush=new SolidBrush(color)){
+                g.DrawEllipse(pen,p.X-r,p.Y-r,r*2,r*2);
+                // Compact ship silhouette; no heading is implied by its fixed upright orientation.
+                float x=r*.38f,y=r*.52f;
+                g.DrawLine(pen,p.X,p.Y-y,p.X-x,p.Y+y*.7f);
+                g.DrawLine(pen,p.X-x,p.Y+y*.7f,p.X,p.Y+y*.25f);
+                g.DrawLine(pen,p.X,p.Y+y*.25f,p.X+x,p.Y+y*.7f);
+                g.DrawLine(pen,p.X+x,p.Y+y*.7f,p.X,p.Y-y);
+                g.DrawString(m.TrackId>0?m.TrackId.ToString("00"):"--",font,brush,p.X+r+4*scale,p.Y-font.Height/2f);
             }
-
-            // FleetContact/source 3: shared tactical data remains visually distinct.
-            // Confirmed shared hostile = triangle; shared unknown/neutral = square.
-            if (m.Source == 3)
-            {
-                DrawGeometricMarker(g, p, m, color, scale, IsHostile(m) ? 1 : 2);
-                if (m.Focused) DrawFocusBrackets(g, p, color, scale);
-                return;
-            }
-
-            // FleetSignal/source 4: shared Spectrum-style signal keeps the four-way cue.
-            if (m.Source == 4)
-            {
-                DrawFourWayReticle(g, p, m, color, scale);
-                return;
-            }
-
-            // Local Spectrum (0), local WeaponCore (1), hostile/unknown/focus all use
-            // the old classic reticle. Focus changes color only; it does not change shape.
-            DrawClassicReticle(g, p, m, color, scale);
         }
 
         private static bool IsHostile(OverlayMarker m)
@@ -1924,7 +1889,7 @@ namespace ZeoOverlay
         private void DrawGeometricMarker(Graphics g, PointF p, OverlayMarker m, Color color, float scale, int shape)
         {
             float r = Math.Max(6f, 9.5f * scale);
-            float idScale = (float)(m.Friendly ? _settings.FriendlyIdScale : _settings.SpectrumIdScale);
+            float idScale = (float)(m.Friendly ? _settings.FriendlyIdScale : ((m.Source==3 || m.Source==4) ? _settings.SharedIdScale : _settings.SpectrumIdScale));
             float fs = Math.Max(9f, 12f * scale * idScale);
             int alpha = m.Stale ? 155 : 238;
             using(var pen=new Pen(Color.FromArgb(alpha,color),Math.Max(1.2f,1.55f*scale)))
@@ -1951,9 +1916,9 @@ namespace ZeoOverlay
             }
         }
 
-        private static void DrawFocusBrackets(Graphics g, PointF p, Color color, float scale)
+        private static void DrawAttackBrackets(Graphics g, PointF p, Color color, float scale)
         {
-            float a=15f*scale, c=7f*scale;
+            float a=22f*scale, c=7f*scale;
             using(var pen=new Pen(Color.FromArgb(240,color),Math.Max(1.4f,1.7f*scale)))
             {
                 g.DrawLine(pen,p.X-a,p.Y-a,p.X-a+c,p.Y-a); g.DrawLine(pen,p.X-a,p.Y-a,p.X-a,p.Y-a+c);
@@ -2099,23 +2064,17 @@ namespace ZeoOverlay
 
         private double MarkerScale(OverlayMarker m)
         {
-            // ZEOCORE_V067_UNIVERSAL_DISTANCE_SCALE
-            // Zeo's Flight HUD v0.7.x distance response, now universal:
-            // <=2 km = tight/minimum; >=60 km = large/maximum; SmoothStep between.
-            double t = (m.Distance - 2000.0) / (60000.0 - 2000.0);
-            t = Math.Max(0, Math.Min(1, t));
-            t = t * t * (3.0 - 2.0 * t);
-            double distanceGain = 0.85 + (1.65 - 0.85) * t;
-
             double baseScale;
-            if (m.Source == 0 || m.Source == 4)
+            if (!m.Friendly && (m.Source == 3 || m.Source == 4))
+                baseScale = _settings.SharedMarkerScale;
+            else if ((m.Source == 0 || m.Source==1) && !m.Friendly && !MarkerSizing.Hostile(m.Relation))
                 baseScale = _settings.SpectrumMarkerScale;
             else if (m.Friendly || m.Distress)
                 baseScale = _settings.FriendlyMarkerScale;
             else
                 baseScale = _settings.HostileMarkerScale;
 
-            return baseScale * distanceGain;
+            return MarkerSizing.Scale(baseScale,m.Distance,_settings.MaxMarkerScale,m.Focused?_settings.FocusMarkerScale:1,m.Offscreen?_settings.OffscreenMarkerScale:1);
         }
 
 
@@ -2124,6 +2083,11 @@ namespace ZeoOverlay
             // ZEOCORE_V067H4_SEMANTIC_TRACK_COLORS
             if (m.Distress) return _settings.ColorOf(_settings.DistressColor, Color.Red);
             if (m.Stale) return _settings.ColorOf(_settings.StaleColor, Color.Gray);
+            if(m.AttackTarget){
+                if(!_settings.TargetMarkPulse)return Color.FromArgb(255,197,55);
+                double pulse=(Math.Sin(System.Diagnostics.Stopwatch.GetTimestamp()/(double)System.Diagnostics.Stopwatch.Frequency*Math.PI*2)+1)*.5;
+                return Color.FromArgb(255,(int)(68+129*pulse),(int)(55*pulse));
+            }
             if (m.Focused) return _settings.ColorOf(_settings.FocusColor, Color.Khaki);
             if (m.Friendly || string.Equals(m.Relation, "friendly", StringComparison.OrdinalIgnoreCase))
                 return _settings.ColorOf(_settings.FriendlyColor, Color.Cyan);
@@ -2134,6 +2098,8 @@ namespace ZeoOverlay
                 return _settings.ThemePreset == 4
                     ? _settings.ColorOf(_settings.HostileColor, Color.Red)
                     : Color.FromArgb(240, 68, 68);
+
+            if (m.Source == 3 || m.Source == 4) return _settings.ColorOf(_settings.SharedTrackColor, Color.MediumPurple);
 
             if (relation.Equals("neutral", StringComparison.OrdinalIgnoreCase))
                 return _settings.ThemePreset == 4
@@ -2183,7 +2149,7 @@ namespace ZeoOverlay
         {
             if (string.IsNullOrWhiteSpace(value)) return "";
             value = value.Trim().Replace("\r", " ").Replace("\n", " ");
-            return value.Length <= max ? value : value.Substring(0, max - 1) + "…";
+            return value.Length <= max ? value : value.Substring(0, max - 1) + "â€¦";
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

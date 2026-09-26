@@ -47,7 +47,7 @@ namespace ZeoOverlay
     internal sealed class HudLayoutState
     {
         internal static readonly string[] Ids={"ship","scope","fleet","ammo","roster","distress"};
-        internal static readonly string[] Names={"SHIP INFO","TOS / SCOPE","FLEET / NETWORK","AMMUNITION","FLEET ROSTER","DISTRESS BANNER"};
+        internal static readonly string[] Names={"SHIP INFO","TOS / SCOPE","FLEET / NETWORK","AMMUNITION","FLEET ROSTER","DISTRESS / SOS"};
         public string Token { get; set; }
         public string Selected { get; set; } = "ship";
         public HudPanelBounds Toolbar { get; set; }

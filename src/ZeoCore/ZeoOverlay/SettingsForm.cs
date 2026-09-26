@@ -34,7 +34,9 @@ namespace ZeoOverlay
         private Label _captureStatus;
         private ZeoDropDown _pageDrop;
         private ZeoDropDown _profileDrop;
-        private ZeoDropDown _menuKeyDrop;
+        private Button _menuKeyCapture;
+        private bool _menuListening,_menuEditing;
+        private int _menuDraft;
         private Panel _dropPopup;
         private ZeoDropDown _openDropDown;
 
@@ -75,6 +77,12 @@ namespace ZeoOverlay
 
             KeyDown += delegate(object sender, KeyEventArgs e)
             {
+                if(_menuEditing && e.KeyCode==Keys.Escape){_menuListening=false;_menuEditing=false;RefreshMenuBinding();e.Handled=true;e.SuppressKeyPress=true;return;}
+                if(_menuListening){
+                    int key=(int)e.KeyCode;
+                    if(key!=0&&MenuBinding.Allowed(key)){_menuDraft=key;_menuListening=false;RefreshMenuBinding();}
+                    e.Handled=true;e.SuppressKeyPress=true;return;
+                }
                 if (e.KeyCode == Keys.Escape)
                 {
                     CloseDropDown();
@@ -82,6 +90,12 @@ namespace ZeoOverlay
                     e.Handled = true;
                 }
             };
+        }
+
+        private void RefreshMenuBinding()
+        {
+            int key=_menuEditing?_menuDraft:MenuBinding.Resolve(_zeoSettings.MenuKey,_zeoSettings.MenuKeyCode);
+            _menuKeyCapture.Text=_menuListening?"PRESS KEY...":key==0?"ASSIGN KEY":((Keys)key).ToString().ToUpperInvariant();
         }
 
         private void BuildShell()
@@ -178,13 +192,20 @@ namespace ZeoOverlay
             });
             _nav.Controls.Add(_profileDrop);
 
-            _menuKeyDrop = CreateDropDown(new[]
-            {
-                "HOME", "INSERT", "PAGE UP", "PAGE DOWN", "END"
-            }, 440, 37, 190,
-            delegate { return _zeoSettings.MenuKey; },
-            delegate(int v) { _zeoSettings.MenuKey = v; });
-            _nav.Controls.Add(_menuKeyDrop);
+            _menuKeyCapture=new Button {Left=440,Top=37,Width=118,Height=28,FlatStyle=FlatStyle.Flat};
+            _menuKeyCapture.Click+=delegate{_menuDraft=MenuBinding.Resolve(_zeoSettings.MenuKey,_zeoSettings.MenuKeyCode);_menuEditing=true;_menuListening=true;RefreshMenuBinding();};
+            var applyMenuKey=new Button {Left=562,Top=37,Width=68,Height=28,Text="APPLY",FlatStyle=FlatStyle.Flat};
+            applyMenuKey.Click+=delegate{
+                if(!_menuEditing||_menuListening)return;
+                _zeoSettings.Reload();
+                string conflict=MenuBinding.Conflict(_menuDraft,_zeoSettings.DistressEnabled,_zeoSettings.DistressKey,_zeoSettings.QuickRefillKey,_zeoSettings.TargetMarkKey);
+                if(conflict!=null){MessageBox.Show(this,conflict,"Menu key");return;}
+                _zeoSettings.MenuKeyCode=_menuDraft;_zeoSettings.Save();_zeoSettings.Reload();
+                if(_zeoSettings.MenuKeyCode!=_menuDraft){MessageBox.Show(this,"Menu key could not be saved.","Menu key");return;}
+                _menuEditing=false;RefreshMenuBinding();_owner.SettingsChanged();
+            };
+            _nav.Controls.Add(_menuKeyCapture);_nav.Controls.Add(applyMenuKey);
+            _refreshers.Add(RefreshMenuBinding);RefreshMenuBinding();
 
             _contentHost = new Panel();
             // ZEOCORE_V12C_CONTENT_BOUNDS_FIX
@@ -760,7 +781,7 @@ namespace ZeoOverlay
             p.Controls.Add(Section("INTEGRATED HUD // LIVE VISUALS"));
             Panel maxRow = RowPanel(42);
             maxRow.Controls.Add(RowLabel("MAX MARKER SIZE"));
-            _zeoMaxMarkerSize = MakeNumber(0.50M, 1.00M, 0.05M, 2);
+            _zeoMaxMarkerSize = MakeNumber(0.50M, 3.00M, 0.05M, 2);
             _zeoMaxMarkerSize.ValueChanged += delegate
             {
                 if (_sync) return;
@@ -769,7 +790,7 @@ namespace ZeoOverlay
             };
             _refreshers.Add(delegate
             {
-                decimal v = (decimal)Math.Max(0.50, Math.Min(1.00, _zeoSettings.MaxMarkerScale));
+                decimal v = (decimal)Math.Max(0.50, Math.Min(3.00, _zeoSettings.MaxMarkerScale));
                 if (_zeoMaxMarkerSize.Value != v) _zeoMaxMarkerSize.Value = v;
             });
             maxRow.Controls.Add(_zeoMaxMarkerSize);
@@ -814,6 +835,7 @@ namespace ZeoOverlay
             p.Controls.Add(ColorRow("Panel backing", delegate { return _zeoSettings.HudPanelColor; }, delegate(string v) { _zeoSettings.HudPanelColor = v; }));
             p.Controls.Add(ColorRow("Panel border", delegate { return _zeoSettings.HudBorderColor; }, delegate(string v) { _zeoSettings.HudBorderColor = v; }));
             p.Controls.Add(ColorRow("Crosshair", delegate { return _zeoSettings.CrosshairColor; }, delegate(string v) { _zeoSettings.CrosshairColor = v; }));
+            p.Controls.Add(ColorRow("Shared data tracks", () => _zeoSettings.SharedTrackColor, v => _zeoSettings.SharedTrackColor=v));
             p.Controls.Add(ColorRow("Spectrum tracks", delegate { return _zeoSettings.SpectrumColor; }, delegate(string v) { _zeoSettings.SpectrumColor = v; }));
             p.Controls.Add(ColorRow("Friendly tracks", delegate { return _zeoSettings.FriendlyColor; }, delegate(string v) { _zeoSettings.FriendlyColor = v; }));
             p.Controls.Add(ColorRow("Hostile tracks", delegate { return _zeoSettings.HostileColor; }, delegate(string v) { _zeoSettings.HostileColor = v; }));

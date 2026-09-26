@@ -8,12 +8,16 @@ namespace ZeoCore
         // Resolve only an existing track's exact entity identity. Never enumerate
         // nearby entities or alter the sensor/fusion track to make a marker fit.
         internal static Vector3D Resolve(HudTrack track, HudMarkerAnchor anchor,
-            double predictionAge, double staleSeconds, Func<long, Vector3D?> readLivePosition)
+            double predictionAge, double staleSeconds, Func<long, Vector3D?> readLivePosition, Func<long, Vector3D?> readNativeSignal = null)
         {
             bool local = track.Source == HudTrackSource.WeaponCore || track.Source == HudTrackSource.Spectrum;
             bool liveEligible = anchor != HudMarkerAnchor.DetectionPosition && track.EntityId != 0 &&
                 track.HasPosition && !track.IsDistress && !track.Stale && track.AgeSeconds <= staleSeconds &&
                 (local || track.SameSector);
+            if(liveEligible && anchor==HudMarkerAnchor.Auto && readNativeSignal!=null){
+                var signal=readNativeSignal(track.EntityId);
+                if(signal.HasValue && Finite(signal.Value))return signal.Value;
+            }
             if (liveEligible && readLivePosition != null)
             {
                 Vector3D? live = readLivePosition(track.EntityId);

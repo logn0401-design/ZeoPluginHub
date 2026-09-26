@@ -176,6 +176,8 @@ namespace ZeoCore
         public int TrackId;
         public string Name;
         public string Relation;
+        internal double RelationAgeSeconds=double.NaN;
+        internal bool AttackTarget;
         public string ContactType;
         public HudTrackSource Source;
         public Vector3D Position;
@@ -183,6 +185,7 @@ namespace ZeoCore
         public double Threat;
         public double? SignalStrength;
         public string RawEmitterId;
+        internal List<string> IdentityAliases;
         public bool Focused;
         public bool Stale;
         public double AgeSeconds;
@@ -206,7 +209,9 @@ namespace ZeoCore
 
         public HudTrack Clone()
         {
-            return (HudTrack)MemberwiseClone();
+            var copy=(HudTrack)MemberwiseClone();
+            if(IdentityAliases!=null)copy.IdentityAliases=new List<string>(IdentityAliases);
+            return copy;
         }
     }
 
@@ -329,30 +334,35 @@ namespace ZeoCore
         {
             public int Id;
             public DateTime Seen;
+            public long Created;
+            public readonly HashSet<string> Keys=new HashSet<string>(StringComparer.Ordinal);
         }
 
         private readonly Dictionary<string, Slot> _slots = new Dictionary<string, Slot>(StringComparer.Ordinal);
-        public int Get(string key, string alias = null)
+        private long _nextCreated;
+        public int Get(string key,string alias=null){return GetForAliases(key,alias==null?null:new[]{alias});}
+        public int GetForAliases(string key,IEnumerable<string> aliases)
         {
-            if (string.IsNullOrEmpty(key)) return 0;
-            Slot slot;
-            if (!_slots.TryGetValue(key, out slot) && (alias == null || !_slots.TryGetValue(alias, out slot)))
-            {
-                var used = new HashSet<int>();
-                foreach (var value in _slots.Values) used.Add(value.Id);
-                int id = 1;
-                while (used.Contains(id)) id++;
-                slot = new Slot { Id = id };
+            if(string.IsNullOrEmpty(key))return 0;
+            Slot slot;_slots.TryGetValue(key,out slot);
+            if(aliases!=null)foreach(string alias in aliases){Slot known;if(alias!=null&&_slots.TryGetValue(alias,out known)&&(slot==null||known.Created<slot.Created))slot=known;}
+            if(slot==null){var used=new HashSet<int>();foreach(var value in _slots.Values)used.Add(value.Id);int id=1;while(used.Contains(id))id++;slot=new Slot{Id=id,Created=++_nextCreated};}
+            Bind(key,slot);
+            if(aliases!=null)foreach(string alias in aliases)if(!string.IsNullOrEmpty(alias))Bind(alias,slot);
+            slot.Seen=DateTime.UtcNow;return slot.Id;
+        }
+        private void Bind(string key,Slot slot)
+        {
+            Slot previous;
+            if(_slots.TryGetValue(key,out previous)&&!ReferenceEquals(previous,slot)){
+                foreach(string old in previous.Keys){_slots[old]=slot;slot.Keys.Add(old);}previous.Keys.Clear();
             }
-            slot.Seen = DateTime.UtcNow;
-            _slots[key] = slot;
-            if (!string.IsNullOrEmpty(alias)) _slots[alias] = slot;
-            return slot.Id;
+            _slots[key]=slot;slot.Keys.Add(key);
         }
 
         public void Clear()
         {
-            _slots.Clear();
+            _slots.Clear();_nextCreated=0;
         }
 
         public void Trim(double seconds)

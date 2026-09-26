@@ -18,6 +18,24 @@ namespace ZeoCore
 
     internal static class GameWindowState
     {
+        private static IntPtr _cachedWindow;
+        private static long _lastWindowProbe;
+        private static readonly uint _processId=GetCurrentProcessId();
+        [DllImport("kernel32.dll")]private static extern uint GetCurrentProcessId();
+        [DllImport("user32.dll")]private static extern bool IsWindow(IntPtr window);
+        private static IntPtr ResolveWindow()
+        {
+            long now=Stopwatch.GetTimestamp();
+            if(_lastWindowProbe==0 || (now-_lastWindowProbe)/(double)Stopwatch.Frequency>=1)
+            {
+                _lastWindowProbe=now;
+                using(var process=Process.GetCurrentProcess())_cachedWindow=process.MainWindowHandle;
+            }
+            uint owner;
+            if(_cachedWindow!=IntPtr.Zero && IsWindow(_cachedWindow) && GetWindowThreadProcessId(_cachedWindow,out owner)!=0 && owner==_processId)return _cachedWindow;
+            return IntPtr.Zero;
+        }
+
         private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
         [StructLayout(LayoutKind.Sequential)]
@@ -59,9 +77,9 @@ namespace ZeoCore
             var snap = new GameWindowSnapshot();
             try
             {
-                using (var process = Process.GetCurrentProcess())
+                
                 {
-                    IntPtr hwnd = process.MainWindowHandle;
+                    IntPtr hwnd = ResolveWindow();
                     RECT r = new RECT();
                     bool ok = false;
 
@@ -117,14 +135,14 @@ namespace ZeoCore
 
                     try
                     {
-                        IntPtr actualHwnd = process.MainWindowHandle;
+                        IntPtr actualHwnd = hwnd;
                         uint gamePid = 0;
                         if (actualHwnd != IntPtr.Zero)
                         {
                             GetWindowThreadProcessId(actualHwnd, out gamePid);
                             snap.WindowHandle = actualHwnd.ToInt64();
                         }
-                        if (gamePid == 0) gamePid = (uint)process.Id;
+                        if (gamePid == 0) gamePid = _processId;
                         snap.ProcessId = unchecked((int)gamePid);
 
                         IntPtr fg = GetForegroundWindow();

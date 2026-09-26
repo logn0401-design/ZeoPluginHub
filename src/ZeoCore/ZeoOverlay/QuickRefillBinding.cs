@@ -22,11 +22,10 @@ namespace ZeoOverlay
         internal static int Index(int key){return Math.Max(0,Array.IndexOf(Keys,key));}
         internal static int NormalizeKey(int key){return Array.IndexOf(Keys,key)>=0 ? key : 0;}
         internal static int NormalizeModifier(int modifier){return modifier>=0&&modifier<Modifiers.Length ? modifier : 1;}
-        internal static string Conflict(int key,int menuKey,bool distressEnabled,int distressKey)
+        internal static string Conflict(int key,int menuKey,bool distressEnabled,int distressKey,int? menuKeyCode=null)
         {
             if(key==0)return null;
-            int[] menus={36,45,33,34,35};
-            if(menuKey>=0&&menuKey<menus.Length&&key==menus[menuKey])return "Quick Refill key conflicts with MENU KEY. Choose another key.";
+            if(key==MenuBinding.Resolve(menuKey,menuKeyCode))return "Quick Refill key conflicts with MENU KEY. Choose another key.";
             if(distressEnabled&&distressKey>=0&&distressKey<8&&key==116+distressKey)return "Quick Refill key conflicts with DISTRESS KEY. Choose another key.";
             return null;
         }
@@ -43,6 +42,26 @@ namespace ZeoOverlay
                 case 7:return ctrl&&alt&&shift;
                 default:return false;
             }
+        }
+    }
+    internal static class MenuBinding
+    {
+        private static readonly int[] LegacyKeys={36,45,33,34,35};
+        internal static bool Allowed(int key) => key==0 || key==8 || key==9 || key==13 || key==32 ||
+            key>=33&&key<=40 || key==45 || key==46 || key>=48&&key<=57 || key>=65&&key<=90 ||
+            key>=96&&key<=111 || key>=112&&key<=123 || key>=186&&key<=192 || key>=219&&key<=222;
+        internal static int Resolve(int legacy,int? code)
+        {
+            if(code.HasValue && Allowed(code.Value))return code.Value;
+            return LegacyKeys[legacy>=0&&legacy<LegacyKeys.Length?legacy:0];
+        }
+        internal static string Conflict(int key,bool distressEnabled,int distressKey,int refillKey,int targetKey)
+        {
+            if(key==0)return null;
+            if(distressEnabled&&key==116+distressKey)return "Menu key conflicts with DISTRESS. Choose another key.";
+            if(key==refillKey)return "Menu key conflicts with QUICK REFILL. Choose another key.";
+            if(key==targetKey)return "Menu key conflicts with TARGET MARK. Choose another key.";
+            return null;
         }
     }
     internal sealed class QuickRefillKeyLatch

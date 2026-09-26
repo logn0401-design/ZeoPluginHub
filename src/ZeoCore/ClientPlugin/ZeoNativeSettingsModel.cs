@@ -101,13 +101,35 @@ namespace ZeoCore
 
         internal void Reload() { Current=OverlaySettings.Load(_path); }
 
+        internal void SaveMenuBinding(int key)
+        {
+            if(!MenuBinding.Allowed(key))throw new ArgumentException("Unsupported menu key.");
+            Reload();
+            var conflict=MenuBinding.Conflict(key,Current.DistressEnabled,Current.DistressKey,Current.QuickRefillKey,Current.TargetMarkKey);
+            if(conflict!=null)throw new ArgumentException(conflict);
+            Current.MenuKeyCode=key;Current.Save();Reload();
+            if(Current.MenuKeyCode!=key)throw new InvalidOperationException("Menu key could not be saved.");
+            _changed?.Invoke();
+        }
+        internal void SaveTargetBinding(int key,int modifier)
+        {
+            Reload();
+            if(QuickRefillBinding.NormalizeKey(key)!=key||QuickRefillBinding.NormalizeModifier(modifier)!=modifier)throw new ArgumentException("Unsupported binding.");
+            var conflict=QuickRefillBinding.Conflict(key,Current.MenuKey,Current.DistressEnabled,Current.DistressKey,Current.MenuKeyCode);
+            if(conflict!=null)throw new ArgumentException(conflict.Replace("Quick Refill","Target mark"));
+            if(key!=0&&key==Current.QuickRefillKey&&modifier==Current.QuickRefillModifier)throw new ArgumentException("Target mark conflicts with Quick Refill.");
+            Current.TargetMarkKey=key;Current.TargetMarkModifier=modifier;Current.Save();Reload();
+            if(Current.TargetMarkKey!=key||Current.TargetMarkModifier!=modifier)throw new InvalidOperationException("Binding could not be saved.");
+            _changed?.Invoke();
+        }
         internal void SaveRefillBinding(int key,int modifier)
         {
             Reload();
             if(QuickRefillBinding.NormalizeKey(key)!=key || QuickRefillBinding.NormalizeModifier(modifier)!=modifier)
                 throw new ArgumentException("Unsupported binding.");
-            string conflict=QuickRefillBinding.Conflict(key,Current.MenuKey,Current.DistressEnabled,Current.DistressKey);
+            string conflict=QuickRefillBinding.Conflict(key,Current.MenuKey,Current.DistressEnabled,Current.DistressKey,Current.MenuKeyCode);
             if(conflict!=null)throw new ArgumentException(conflict);
+            if(key!=0&&key==Current.TargetMarkKey&&modifier==Current.TargetMarkModifier)throw new ArgumentException("Quick Refill conflicts with Target mark.");
             Current.QuickRefillKey=key;Current.QuickRefillModifier=modifier;Current.Save();Reload();
             if(Current.QuickRefillKey!=key || Current.QuickRefillModifier!=modifier)throw new InvalidOperationException("Binding could not be saved.");
             _changed?.Invoke();
@@ -125,9 +147,20 @@ namespace ZeoCore
                 (Convert.ToInt32(value) < 0 || Convert.ToInt32(value) >= option.Choices.Length))
                 throw new ArgumentException("Choose one of the listed values.");
             option.Write(Current, value);
+            if(option.Key=="MenuKey")Current.MenuKeyCode=null;
+            if(option.Key=="MenuKey" || option.Key=="DistressKey" || option.Key=="DistressEnabled"){
+                var menuConflict=MenuBinding.Conflict(MenuBinding.Resolve(Current.MenuKey,Current.MenuKeyCode),Current.DistressEnabled,Current.DistressKey,Current.QuickRefillKey,Current.TargetMarkKey);
+                if(menuConflict!=null){Reload();throw new ArgumentException(menuConflict);}
+            }
+            if(Current.TargetMarkKey!=0){
+                string targetConflict=QuickRefillBinding.Conflict(Current.TargetMarkKey,Current.MenuKey,Current.DistressEnabled,Current.DistressKey,Current.MenuKeyCode);
+                if(targetConflict!=null||(Current.TargetMarkKey==Current.QuickRefillKey&&Current.TargetMarkModifier==Current.QuickRefillModifier)){
+                    Reload();throw new ArgumentException("Target mark key conflicts with another action. Change its binding first.");
+                }
+            }
             if(option.Key=="QuickRefillKey" || option.Key=="QuickRefillModifier" || option.Key=="MenuKey" || option.Key=="DistressKey" || option.Key=="DistressEnabled")
             {
-                string conflict=QuickRefillBinding.Conflict(Current.QuickRefillKey,Current.MenuKey,Current.DistressEnabled,Current.DistressKey);
+                string conflict=QuickRefillBinding.Conflict(Current.QuickRefillKey,Current.MenuKey,Current.DistressEnabled,Current.DistressKey,Current.MenuKeyCode);
                 if(conflict!=null){Reload();throw new ArgumentException(conflict);}
             }
             Current.Save();

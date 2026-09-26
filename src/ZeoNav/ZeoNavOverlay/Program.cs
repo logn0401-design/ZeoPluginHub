@@ -51,7 +51,8 @@ namespace ZeoNavOverlay
         // WinForms .Handle creates the native HWND; older builds did that every Tick
         // even while the trip HUD was "hidden", leaving a path for a large white
         // click-through surface at game startup.
-        private HudForm hud;
+        private HudForm hud, targetHud, targetMarker, targetBanner;
+        private DateTime ordinaryHudAt=DateTime.MinValue;
         private readonly MenuForm menu = new MenuForm();
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         private readonly int commandPort;
@@ -79,8 +80,6 @@ namespace ZeoNavOverlay
             if (s == null) return;
             last = s;
             bool streamerMode = s.Config == null || s.Config.StreamerMode;
-            menu.SetStreamerMode(streamerMode);
-            menu.Apply(s);
 
             // Never read menu.Handle/hud.Handle unless that window already owns a
             // native handle. Handle getters create HWNDs, which was the hidden white-box
@@ -90,6 +89,19 @@ namespace ZeoNavOverlay
             bool menuFocus = menu.Visible && menu.IsHandleCreated && foreground == menu.Handle;
             bool gameFocus = s.GameHwnd != 0 && foreground.ToInt64() == s.GameHwnd;
             bool allowed = gameFocus || menuFocus;
+            UpdateTargetSurface(ref targetHud,s,gameFocus&&receiver.Fresh&&s.TargetSelecting,streamerMode,true);
+            UpdateTargetSurface(ref targetMarker,s,gameFocus&&receiver.Fresh&&s.TargetMarkerVisible,streamerMode);
+            bool showLock=gameFocus&&receiver.Fresh&&s.TargetLocked&&!s.TargetSelecting;
+            if(showLock&&s.ClientW>10&&s.ClientH>10)
+            {
+                if(targetBanner==null||targetBanner.IsDisposed)targetBanner=new HudForm();
+                targetBanner.SetStreamerMode(streamerMode);targetBanner.RenderTargetLock(s);
+            }
+            else if(targetBanner!=null){targetBanner.EnsureHidden();targetBanner.Dispose();targetBanner=null;}
+            timer.Interval=s.TargetSelecting?8:s.TargetMarkerVisible?16:50;
+            // Keep target boxes responsive without repainting the ordinary HUD at that rate.
+            if(gameFocus&&s.TargetMarkerVisible&&(DateTime.UtcNow-ordinaryHudAt).TotalMilliseconds<50)return;
+            ordinaryHudAt=DateTime.UtcNow;menu.SetStreamerMode(streamerMode);menu.Apply(s);
 
             if (s.MenuVisible && allowed)
             {
@@ -132,6 +144,13 @@ namespace ZeoNavOverlay
             }
         }
 
+        private void UpdateTargetSurface(ref HudForm surface,NavSnapshot snapshot,bool show,bool streamer,bool cursor=false)
+        {
+            if(!show||snapshot.ClientW<10||snapshot.ClientH<10){if(surface!=null){surface.EnsureHidden();surface.Dispose();surface=null;}return;}
+            if(surface==null||surface.IsDisposed)surface=new HudForm();
+            surface.SetStreamerMode(streamer);
+            if(cursor)surface.RenderTargetReticle(snapshot);else surface.RenderTarget(snapshot);
+        }
         private void Send(NavCommand cmd)
         {
             try
@@ -156,6 +175,7 @@ namespace ZeoNavOverlay
             try { receiver.Dispose(); } catch { }
             try { timer.Dispose(); } catch { }
             try { if (hud != null) hud.Dispose(); } catch { }
+            try { targetHud?.Dispose();targetMarker?.Dispose();targetBanner?.Dispose(); } catch { }
             try { menu.Dispose(); } catch { }
             base.ExitThreadCore();
         }
@@ -167,6 +187,8 @@ namespace ZeoNavOverlay
         private Thread thread;
         private volatile bool run;
         private NavSnapshot latest;
+        private DateTime receivedAt;
+        internal bool Fresh {get{lock(gate)return (DateTime.UtcNow-receivedAt).TotalSeconds<2;}}
         private readonly object gate = new object();
         public NavSnapshot Latest { get { lock (gate) return latest; } }
         public int LocalPort { get; private set; }
@@ -188,7 +210,7 @@ namespace ZeoNavOverlay
                 {
                     byte[] b = client.Receive(ref ep);
                     NavSnapshot s = JsonIo.FromBytes<NavSnapshot>(b);
-                    if (s != null) lock (gate) latest = s;
+                    if (s != null) lock (gate) {latest = s;receivedAt=DateTime.UtcNow;}
                 }
                 catch (SocketException) { if (run) Thread.Sleep(25); }
                 catch { Thread.Sleep(50); }
@@ -219,6 +241,7 @@ namespace ZeoNavOverlay
 
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT { public int X, Y; public POINT(int x, int y) { X = x; Y = y; } }
+        [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct SIZE { public int cx, cy; public SIZE(int x, int y) { cx = x; cy = y; } }
@@ -525,6 +548,89 @@ namespace ZeoNavOverlay
         }
 
         public void Apply(NavSnapshot x) { s = x; }
+        internal static string DockSpeedText(NavSnapshot snap)
+        {return "SPD "+snap.SpeedMps.ToString("0.00")+" m/s   //   RCS "+(snap.SpeedCapMps>0?"LIMIT "+snap.SpeedCapMps.ToString("0.00")+" m/s":"HOLD");}
+        internal static Bitmap TargetBitmap(NavSnapshot snap)
+        {
+            const int width=64,height=64;
+            var bitmap=new Bitmap(width,height,PixelFormat.Format32bppPArgb);
+            using(var g=Graphics.FromImage(bitmap))
+            {
+                g.Clear(Color.Transparent);g.SmoothingMode=SmoothingMode.AntiAlias;
+                int state=snap.TargetCursorState==3?3:2;
+                using(var pen=new Pen(state==3?Color.FromArgb(255,78,63):state==2?Color.FromArgb(96,238,115):Color.FromArgb(255,193,7),2))
+                {
+                    // The box follows the Spectrum signal, never the mouse cursor.
+                    foreach(int x in new[]{14,50})foreach(int y in new[]{14,50})
+                    {
+                        g.DrawLine(pen,x,y,x+(x<32?9:-9),y);g.DrawLine(pen,x,y,x,y+(y<32?9:-9));
+                    }
+                    if(state==3)g.DrawEllipse(pen,28,28,8,8);
+                }
+            }
+            return bitmap;
+        }
+        internal static PointF TargetScreenPoint(NavSnapshot snap)
+        {return new PointF(snap.ClientX+(float)((snap.TargetMarkerX+1)*.5*snap.ClientW),snap.ClientY+(float)((1-snap.TargetMarkerY)*.5*snap.ClientH));}
+        internal void RenderTarget(NavSnapshot snap)
+        {
+            if(!IsHandleCreated){CreateControl();Native.ShowWindow(Handle,Native.SW_HIDE);}
+            using(var bitmap=TargetBitmap(snap))
+            {
+                var point=TargetScreenPoint(snap);
+                Present(bitmap,(int)point.X-bitmap.Width/2,(int)point.Y-bitmap.Height/2);
+            }
+        }
+        internal static Bitmap TargetReticleBitmap(NavSnapshot snap)
+        {
+            var bitmap=new Bitmap(48,48,PixelFormat.Format32bppPArgb);
+            using(var g=Graphics.FromImage(bitmap))
+            using(var pen=new Pen(snap.TargetCursorState==2?Color.FromArgb(96,238,115):Color.FromArgb(255,193,7),2))
+            {
+                g.Clear(Color.Transparent);g.SmoothingMode=SmoothingMode.AntiAlias;
+                // Small open center keeps the contact visible at the exact click point.
+                g.DrawLine(pen,24,5,24,16);g.DrawLine(pen,24,32,24,43);
+                g.DrawLine(pen,5,24,16,24);g.DrawLine(pen,32,24,43,24);
+                g.DrawEllipse(pen,19,19,10,10);
+            }
+            return bitmap;
+        }
+        internal void RenderTargetReticle(NavSnapshot snap)
+        {
+            if(!IsHandleCreated){CreateControl();Native.ShowWindow(Handle,Native.SW_HIDE);}
+            Native.POINT cursor;
+            if(!Native.GetCursorPos(out cursor)||cursor.X<snap.ClientX||cursor.X>=snap.ClientX+snap.ClientW||
+                cursor.Y<snap.ClientY||cursor.Y>=snap.ClientY+snap.ClientH){EnsureHidden();return;}
+            using(var bitmap=TargetReticleBitmap(snap))
+                Present(bitmap,cursor.X-bitmap.Width/2,cursor.Y-bitmap.Height/2);
+        }
+        internal static Bitmap TargetLockBitmap(NavSnapshot snap)
+        {
+            var bitmap=new Bitmap(380,54,PixelFormat.Format32bppPArgb);
+            using(var g=Graphics.FromImage(bitmap))
+            using(var labelFont=new Font("Segoe UI",10,FontStyle.Bold))
+            using(var infoFont=new Font("Segoe UI",9,FontStyle.Regular))
+            using(var red=new SolidBrush(Color.FromArgb(255,78,63)))
+            using(var pale=new SolidBrush(Color.FromArgb(224,230,236)))
+            using(var backing=new SolidBrush(Color.FromArgb(185,15,25,32)))
+            {
+                g.Clear(Color.Transparent);
+                g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                g.FillRectangle(backing,4,4,372,46);
+                g.FillRectangle(red,4,4,3,46);
+                string label="LOCKED // "+(snap.TargetLabel??"CONTACT");
+                g.DrawString(label,labelFont,red,new RectangleF(15,7,355,20));
+                string info="RANGE "+Dist(snap.TargetDistance)+"   REL "+snap.TargetRelativeSpeed.ToString("0.0")+" M/S   CTRL + RMB ABORT ALL";
+                g.DrawString(info,infoFont,pale,new RectangleF(15,28,355,18));
+            }
+            return bitmap;
+        }
+        internal void RenderTargetLock(NavSnapshot snap)
+        {
+            if(!IsHandleCreated){CreateControl();Native.ShowWindow(Handle,Native.SW_HIDE);}
+            using(var bitmap=TargetLockBitmap(snap))
+                Present(bitmap,snap.ClientX+(snap.ClientW-bitmap.Width)/2,snap.ClientY+20);
+        }
 
         public void Render(NavSnapshot snapshot, Rectangle gameBounds)
         {
@@ -665,9 +771,9 @@ namespace ZeoNavOverlay
             DrawTextRight(g, "ETA " + Time(s.EtaSeconds), p.Text, x + usable, y + 2, 14, c.EtaScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
             y += phaseRow;
             bool capReady = s.SpeedCapMps > 1 && (s.SpeedCapSource ?? "").IndexOf("WAIT", StringComparison.OrdinalIgnoreCase) < 0;
-            string speedLine = capReady
+            string speedLine = s.State=="DOCKING" ? DockSpeedText(s) : capReady
                 ? "SPD " + Speed(s.SpeedMps) + " / " + Speed(s.CommandSpeedMps) + "   CAP " + Speed(s.SpeedCapMps)
-                : "SPD " + Speed(s.SpeedMps) + "   //   CAP WAIT SHIPCORE";
+                : "SPD " + Speed(s.SpeedMps) + "   //   CAP NOT RESOLVED";
             DrawText(g, speedLine, p.Text, x, y, 13, c.SpeedScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable));
             y += speedRow;
             string sig = s.SpectrumKmReady ? "SIG " + SigKmText(s.SpectrumDriveKm) + " / MAX " + SigKmText(s.MaxDriveSigKm) : "SIG KM WAIT / MAX " + SigKmText(s.MaxDriveSigKm);
@@ -680,7 +786,13 @@ namespace ZeoNavOverlay
             using (var fg = new SolidBrush(stateColor)) g.FillRectangle(fg, x, y, usable * (float)Math.Max(0, Math.Min(1, s.Progress01)), progH);
             y += progressRow;
 
-            if (s.ManualFlipActive)
+            if(s.State=="TARGET FLIGHT")
+            {
+                DrawText(g,"RELATIVE "+s.TargetRelativeSpeed.ToString("0.0")+" M/S",p.Warning,x,y,14,c.FlipScale*c.GlobalScale,FontStyle.Bold,HudTitleFont(c,effectiveFrame,effectiveFont),Math.Max(1,usable));
+                y+=flipRow;
+                DrawText(g,"STAND-OFF "+c.InterceptStandOffKm.ToString("0")+" KM / "+(c.MatchKeep?"KEEP MATCHED":"MATCH ONCE"),p.Secondary,x,y,11,c.StopScale*c.GlobalScale,FontStyle.Regular,HudBodyFont(c,true,effectiveFrame,effectiveFont),Math.Max(1,usable));
+            }
+            else if (s.ManualFlipActive)
             {
                 DrawText(g, "MANUAL FLIP  " + s.ManualFlipDegreesLeft.ToString("0") + "° LEFT", p.Warning, x, y, 16, c.FlipScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont), Math.Max(1,usable));
             }
@@ -1627,7 +1739,7 @@ namespace ZeoNavOverlay
             if (capStatus != null)
             {
                 bool capReady = snapshot.SpeedCapMps > 1 && (snapshot.SpeedCapSource ?? "").IndexOf("WAIT", StringComparison.OrdinalIgnoreCase) < 0;
-                string capText = capReady ? Speed(snapshot.SpeedCapMps) : "WAIT SHIPCORE";
+                string capText = snapshot.State=="DOCKING" ? "RCS "+snapshot.SpeedCapMps.ToString("0.00")+" m/s" : capReady ? Speed(snapshot.SpeedCapMps) : "NOT RESOLVED";
                 capStatus.Text = "Speed cap " + capText + "   // " + (snapshot.SpeedCapSource ?? "UNKNOWN") +
                     "   // grids " + snapshot.ConstructGridCount + " thr " + snapshot.ThrusterCount + " main " + snapshot.MainDriveCount +
                     " fMain " + snapshot.ForwardMainDriveCount + " fWork " + snapshot.ForwardWorkingThrusterCount +

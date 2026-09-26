@@ -1,65 +1,38 @@
 # Zeo Plugins
 
-Zeo plugins for Space Engineers 1 on Windows with Pulsar Legacy.
+Space Engineers plugins for Windows and Pulsar Legacy, with native settings menus and external HUDs.
 
-| Plugin | Public release | Purpose |
-| --- | --- | --- |
-| Zeo Core | 1.0.6 | Tactical HUD, TOS scope, ship and ammunition status, friendly fleet roster and Battle Manager contact sharing. |
-| Zeo Nav | 1.0.3 | GPS navigation, speed control, flip-and-burn guidance, precision attitude controls and navigation HUD. |
-| Zeo Ore Helper | 1.0.4 | Learned ore search, configurable pings, optional SDX2 scan estimates and approximate nearby deposit guidance. |
+| Plugin | Release | Purpose |
+|---|---|---|
+| Zeo Core | 1.0.8 | Tactical HUD, shared tracks, distress, docked refill and configurable signals |
+| Zeo Nav | 1.1.15 | Navigation, signal intercept, velocity matching and docking |
+| Zeo PDC Manager | 0.3.31 | WeaponCore point-defense management and threat/weapon diagnostics |
+| Zeo Ore Helper | 1.0.5 | Ore surveys, asteroid/deposit search and configurable mining HUD |
 
-## Add the catalog
+## Install once, receive later releases through Pulsar
 
-Use Pulsar Legacy 2.4.2 or later on Windows. Add `-sources` to your existing Pulsar Steam launch options and restart. In Pulsar, open **Sources > Hubs > Add Remote Hub**:
+Download [Zeo automatic-update setup](https://github.com/logn0401-design/ZeoPluginHub/releases/tag/zeo-suite-2026-09-26), extract it, close Space Engineers, and run INSTALL.cmd. Pulsar Legacy must already be installed and launched once. The combined setup enables the four plugins above; individual plugin ZIPs enable only that plugin.
 
-| Field | Value |
-| --- | --- |
-| Display Name | Zeo Plugins |
-| GitHub User | logn0401-design |
-| Repo Name | ZeoPluginHub |
-| Branch Name | main |
+Setup adds/enables `logn0401-design/ZeoPluginHub` on branch `main` as a trusted source, switches the selected plugins from matching local DLL entries to their catalog entries, and backs up the current profile/source configuration. It retains plugin settings, saved named profiles, unrelated plugins and workshop mods. Old local DLLs are retained but disabled in the current profile, so they can be re-enabled for rollback. Do not enable both local and catalog copies of the same plugin.
 
-Apply and refresh sources. Enable **Zeo Core**, **Zeo Nav** or **Zeo Ore Helper**, then fully restart. Disable any older local entry for the same plugin before enabling its catalog entry. Keep your existing settings folders.
+Launch Space Engineers through Pulsar Legacy again. Pulsar downloads the selected runtimes and their checksum-verified matching overlays. No SDK or manual DLL copying is needed. Named profiles can select a different plugin set; run setup again after choosing a different profile if you want to migrate that profile too.
 
-## Updating
+For manual source setup, expose Pulsar's Sources screen with the `-sources` launch option and add the repository above. Enable the catalog plugins you want and disable their older local/candidate equivalents.
 
-Close Space Engineers and all Zeo overlays before refreshing and restarting. A leftover overlay process can lock files in Pulsar's cache and prevent an update. Pulsar checks source metadata at startup, subject to cache age, or when sources are explicitly refreshed. Updates load after a full restart.
+## Updates
 
-Each plugin has its own release version. Updates include matching runtime and overlay assets and preserve existing settings. These plugin updates do not complete the separate backend authorization migration.
+A source-code push is not a plugin release. Published entries pin a loader commit plus runtime/overlay asset hashes. Pulsar fetches a changed release when its source list refreshes and the plugin loads on a full game restart. Its normal source-list cache can last two hours. Setup clears only this hub's saved refresh metadata once, forcing a fresh check next launch; it does not shorten the global cache policy. Use source refresh/re-run setup after closing the game if a just-published release is not visible yet. Network/download failures and selected alternate-version pins can prevent an update.
 
-## Current HUD update
+Standalone local DLLs do not auto-update from this catalog. Users must make the one-time switch to catalog entries. A running game is not hot-patched.
 
-Core 1.0.6 removes retained Spectrum ghost signals, stabilizes confirmed contact numbers and adds aggregate performance timings. Nav 1.0.3 and Ore Helper 1.0.2 add edge/corner resizing. Across all three, width adjusts columns and height scales rows/text without overwriting font preferences. Nav retains its SDX drive catalog and GPS search. [Changes, test evidence and limitations](docs/HUD_CONSISTENCY_2026-09-24.md).
+## This release
 
-## Feature notes
+Core's MENU KEY now supports click, press a key, then APPLY; Escape/Cancel discards a draft. Existing shortcuts are retained. Clear+Apply disables Core's shortcut; Pulsar Configure can reopen it. Core also includes the accumulated HUD, refill, tracking, help and performance-candidate work. PDC and Ore preserve their existing capture UI and protect text entry from menu hotkeys. PDC now receives its overlay from the same verified catalog release as its runtime.
 
-- **Core:** Includes configurable draggable HUD panels and a native Zeo settings menu. Spectrum / Auto follows the native Spectrum signal timing and position; Grid Center remains available for locally replicated entities. Remote tracks still depend on telemetry and prediction. The external overlay has some display latency. Battle Manager sharing requires compatible telemetry and configuration; the existing open-test sharing endpoints have not yet completed the authenticated migration.
-- **Nav:** Includes the matching external HUD, Epstein main-drive support and own-ship Spectrum signature information. Spectrum features require compatible world/server telemetry. See [Zeo Nav guide](docs/ZEO-NAV.md).
-- **Ore Helper:** Search starts off each launch. Nearby deposit guidance defaults to 5 km. Ore quantities are sampled estimates, not exact server totals. Existing selections, HUD positions and learned data are preserved. See [Ore Helper guide](docs/ORE_HELPER.md).
-- **PDC:** Distributed separately as a local package. Its 1.0 rebrand and rebuilt installer are pending; this catalog does not yet install it. Its bank-queue planner remains observational and is not a completed replacement for native target control.
+Nav includes the latest prepared 1.1.15 release: Left Ctrl target reticle, intercept continuity, guarded flip assist and reduced repeated gyro/RCS state writes. Its source was taken from the completed 1.1.15 package, without rewriting flight logic in this publication task.
 
-## Maintainers
+Build, settings, migration and isolated loader/asset tests passed. These checks do not replace in-game multiplayer, flight, capture or heavy-combat validation of this release. See [release validation](docs/CATALOG_RELEASE_2026-09-26.md).
 
-See the [release procedure](docs/RELEASING.md). Keep descriptors commit-pinned and verify asset SHA-256 hashes. Rebuild matching runtime and overlay assets when changing compiled code; source edits alone do not update supplied binaries. No game DLLs, credentials, player payloads or machine-specific settings belong in this repository.
+## Rollback
 
-## Zeo Core 1.0.1 — saved distress GPS
-
-Active distress locations received from any sector now save to the normal Space Engineers GPS list, with Show on HUD off initially. Names include the reporting sector. Refreshes update existing points rather than duplicating them; points stay saved when a call ends. Zeo Nav can read these hidden GPS entries. This does not start navigation automatically or change sector travel mechanics.
-
-Uses the existing main Zeo Core catalog entry; the separate inventory candidate is not included. Refresh Pulsar sources and fully restart the game. Keep only the main Zeo Core enabled.
-
-Core and overlay builds, 25 GPS lifecycle/API-adapter tests and the installed Pulsar entry-point compiler passed. Multiplayer save/rejoin, sector transfer and NavOS runtime behavior still need in-game verification. Full details are in docs/DISTRESS_GPS_1.0.1.md.
-
-## Zeo Nav 1.0.2 — main drives and GPS search
-
-All 31 inspected SDX main-drive variants now have explicit built-in entries. Type in SEARCH GPS beside the native dropdown to narrow destinations by name, choose a result and start. The 1.0.1 overlay-lifetime fix is retained. Refresh Pulsar sources and fully restart. [Drive catalog and validation](docs/ZEO-NAV-1.0.2.md).
-
-## Ore Helper 1.0.3 — native menu key binding
-
-The native menu now has a **MENU KEY** button in its footer. Click it, click the current key, press a new keyboard key, then **APPLY**. **CLEAR** disables the shortcut only after APPLY. Closing with ESC or navigating away discards the binding draft. Pulsar Configure or `/ore menu` can reopen the menu if the shortcut is disabled.
-
-This follows PDC's menu-key capture pattern and preserves existing bindings. The key can now be any supported non-modifier keyboard key (ESC stays reserved), including keys outside the former short dropdown. This is a single-key menu binding, like PDC's menu key. Ore Helper's shortcut pauses while a binding draft is being edited. The 1.0.2 resizing, text scaling, saved layout and automatic overlay shutdown changes remain intact. Refresh sources and restart to update. [Validation](docs/ORE_KEYBIND_1.0.3.md).
-
-## Ore Helper 1.0.4 — simpler menus
-
-Common search settings have one home on SEARCH, including an ANY / ALL ore-match switch. The footer has one MOVE / RESIZE HUD button and the existing MENU KEY button. Shorter labels, simpler category names, fewer repeated controls and explanatory tooltips make the remaining settings easier to navigate. Existing settings and saved choices are preserved. Refresh Pulsar sources and restart to update. [Validation](docs/ORE_MENU_1.0.4.md).
+Setup prints its backup directory under `%APPDATA%/Pulsar/Legacy/ZeoCatalogBackups`. With the game closed, restore that backup's `Current.xml` to `Legacy/Profiles/Current.xml` and `sources.xml` to `Legacy/Sources/sources.xml`, or switch the selected plugin back to its retained local entry in Pulsar. Do not enable duplicate copies.

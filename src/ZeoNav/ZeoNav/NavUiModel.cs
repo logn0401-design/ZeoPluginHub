@@ -36,6 +36,7 @@ namespace ZeoNav
         }
         public object Parse(string text)
         {
+            if(Page=="KEYS") return NavKeyBinding.Parse(text).Text;
             if (Kind == NavOptionKind.Color)
             {
                 if (!Regex.IsMatch(text ?? "", "^#[0-9A-Fa-f]{6}$")) throw new ArgumentException("Use #RRGGBB (six hex digits).");
@@ -59,7 +60,7 @@ namespace ZeoNav
 
     internal static class NavUiCatalog
     {
-        public static readonly string[] Pages = { "ROUTE", "TRIP HUD", "STYLE", "KEYS", "ADVANCED" };
+        public static readonly string[] Pages = { "ROUTE", "TRIP HUD", "STYLE", "KEYS", "ADVANCED", "DOCKING", "TARGET" };
         public static readonly string[] Frames = { "SE INDUSTRIAL", "FIGHTER HUD", "MARS TACTICAL", "BELTER UTILITY", "NAVY GLASS", "STEALTH", "WAR ROOM", "COMMAND GRID", "REDLINE", "BLACKSITE", "CHEVRON", "SPLIT WING", "HEX COMMAND", "RAZOR" };
         public static readonly string[] Themes = { "GRAPHITE", "MONOCHROME", "AMBER", "HIGH CONTRAST", "CUSTOM", "WAR ROOM" };
         public static readonly string[] Fonts = { "MATCH HUD", "CONDENSED", "TECH", "STANDARD" };
@@ -74,7 +75,13 @@ namespace ZeoNav
             Action<string,string,string,string> action = (p,s,k,l) => rows.Add(new NavOption { Page=p,Section=s,Key=k,Label=l,Kind=NavOptionKind.Action });
             number("ROUTE","SIGNATURE","MaxDriveSigKm","MAX SIG (km)",5,750,5,0);
             number("ROUTE","DESTINATION","BufferKm","Arrival buffer (km)",0,10,.1,1);
-            boolean("ROUTE","CAPTURE","StreamerMode","Streamer mode (external HUD)");
+            boolean("ROUTE","QUIET DEPARTURE","DepartureSigEnabled","Use departure SIG limit");
+            number("ROUTE","QUIET DEPARTURE","DepartureSigKm","Departure MAX SIG (km)",5,750,5,0);
+            number("ROUTE","QUIET DEPARTURE","DepartureDistanceKm","Departure distance (km)",1,1000,10,0);
+            boolean("ROUTE","QUIET ARRIVAL","ApproachSigEnabled","Use approach SIG limit");
+            number("ROUTE","QUIET ARRIVAL","ApproachSigKm","Approach MAX SIG (km)",5,750,5,0);
+            number("ROUTE","QUIET ARRIVAL","ApproachDistanceKm","Approach distance (km)",1,1000,10,0);
+            boolean("STYLE","CAPTURE","StreamerMode","Streamer mode (external HUD)");
             action("TRIP HUD","PLACEMENT","@LAYOUT","EDIT HUD POSITION");
             choice("TRIP HUD","VISIBILITY","TripPanelVisibility","Trip visibility",new[] {"AUTO","ALWAYS","HIDDEN"});
             boolean("TRIP HUD","APPEARANCE","TripUseHudTheme","Follow ZeoCore appearance");
@@ -107,11 +114,21 @@ namespace ZeoNav
             number("STYLE","FRAME","CornerCut","Corner cut",.25,2.5,.05,2);
             number("STYLE","FRAME","HeaderHeight","Header height",.5,2,.05,2);
             number("STYLE","FRAME","PatternIntensity","Pattern intensity",0,2,.05,2);
-            string[] keys={"MenuKey","StartKey","AbortKey","ManualFlipKey","SignalUpKey","SignalDownKey"};
-            string[] keyLabels={"Open / close Nav","Start selected route","Abort / release","Manual 180 flip","MAX SIG +5 km","MAX SIG -5 km"};
+            string[] keys={"MenuKey","StartKey","AbortKey","ManualFlipKey","SignalUpKey","SignalDownKey","QuickDockKey","RefuelKey","TargetSelectKey","TargetCycleKey","InterceptKey","MatchVelocityKey"};
+            string[] keyLabels={"Open / close Nav","Start selected route","Abort / release","Manual 180 flip","MAX SIG +5 km","MAX SIG -5 km","Quick Dock / cancel","Refuel / cancel","Select target (mouse)","Cycle reticle contacts","Intercept / cancel","Match velocity / cancel"};
             string[] values=new[] {"None"}.Concat(Enum.GetNames(typeof(MyKeys)).Where(x=>x!="None").OrderBy(x=>x)).ToArray();
             for(int i=0;i<keys.Length;i++) choice("KEYS","KEYBOARD",keys[i],keyLabels[i],values);
-            number("ADVANCED","FLIGHT","FlipTimeSeconds","180 flip allowance (s)",1,60,.5,1);
+            boolean("ADVANCED","FLIGHT","RcsTurnAssist","RCS turn assist (experimental)");
+            number("ADVANCED","FLIGHT","FlipTimeSeconds","Minimum flip allowance (s)",1,1800,.5,1);
+            number("TARGET","RENDEZVOUS","InterceptStandOffKm","Intercept stand-off (km)",2,50,1,0);
+            boolean("TARGET","SELECTION","TargetCtrlAim","Hold Left Ctrl to aim and lock");
+            boolean("TARGET","VELOCITY","MatchKeep","Keep velocity matched");
+            boolean("TARGET","ENGINES","MatchRcsOnly","RCS only for target flight");
+            number("DOCKING","APPROACH","DockScanMeters","Search radius (m)",50,1000,50,0);
+            number("DOCKING","APPROACH","DockStandOffMeters","Minimum stand-off (m)",10,500,10,0);
+            number("DOCKING","APPROACH","DockTransitMps","Transit speed (m/s)",.2,6,.5,1);
+            number("DOCKING","APPROACH","DockApproachMps","Close approach speed (m/s)",.2,2,.1,1);
+            boolean("DOCKING","REFUEL","RefuelAfterDock","Refuel after docking");
             number("ADVANCED","FLIGHT","BrakeSafety","Brake safety multiplier",1,2,.01,2);
             number("ADVANCED","ARRIVAL","ArrivalRadiusMeters","Arrival radius (m)",1,100,1,0);
             number("ADVANCED","ARRIVAL","ArrivalSpeedMps","Arrival speed (m/s)",.05,5,.05,2);
@@ -171,6 +188,7 @@ namespace ZeoNav
                 field.SetValue(current,Convert.ChangeType(item.Value,field.FieldType,CultureInfo.InvariantCulture));
             }
             current=ConfigRules.Clamp(current);
+            if(changes.Keys.Any(k=>NavHotkeys.Keys.Contains(k)))NavHotkeys.ValidateNewBindings(current);
             string temp=path+".native-"+Guid.NewGuid().ToString("N")+".tmp";
             try
             {

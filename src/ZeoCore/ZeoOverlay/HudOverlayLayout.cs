@@ -34,37 +34,69 @@ namespace ZeoOverlay
         }
         private IDisposable BeginPanelSize(Graphics g,string id,RectangleF rect)
         {
-            return new PanelSizeScope(g,_panelFit[id],rect);
+            return new PanelSizeScope(this,g,_panelFit[id],rect,PanelTextScale(id));
         }
+        private float _activeTextMultiplier=1;
+        private Dictionary<FontKey,Font> _fittedFonts;
+        private StringFormat _fitLeft,_fitRight,_fitCenter;
+        private float PanelTextScale(string id)
+        {
+            double v=id=="ship"?_settings.ShipBoxTextScale:id=="scope"?_settings.ScopeBoxTextScale:id=="fleet"?_settings.FleetBoxTextScale:id=="ammo"?_settings.AmmoBoxTextScale:id=="roster"?_settings.RosterBoxTextScale:_settings.DistressBoxTextScale;
+            return (float)(double.IsNaN(v)||double.IsInfinity(v)?1:Math.Max(.6,Math.Min(3,v)));
+        }
+        private struct FontKey : IEquatable<FontKey>
+        {
+            internal string Name;internal FontStyle Style;internal float Size;
+            public bool Equals(FontKey other){return Name==other.Name&&Style==other.Style&&Size==other.Size;}
+            public override bool Equals(object other){return other is FontKey&&Equals((FontKey)other);}
+            public override int GetHashCode(){return (Name.GetHashCode()*397^(int)Style)*397^Size.GetHashCode();}
+        }
+        private Font FittedFont(Font original,float size)
+        {
+            size=(float)(Math.Floor(Math.Max(.5,size)*4)/4);
+            if(_fittedFonts==null)_fittedFonts=new Dictionary<FontKey,Font>();
+            var key=new FontKey { Name=original.Name,Style=original.Style,Size=size };
+            Font font;if(_fittedFonts.TryGetValue(key,out font))return font;
+            if(_fittedFonts.Count>=256){foreach(var value in _fittedFonts.Values)value.Dispose();_fittedFonts.Clear();}
+            font=new Font(original.FontFamily,size,original.Style,GraphicsUnit.Pixel);_fittedFonts[key]=font;return font;
+        }
+        private void DisposeTextCache(){if(_fittedFonts!=null){foreach(var f in _fittedFonts.Values)f.Dispose();_fittedFonts.Clear();}_fitLeft?.Dispose();_fitRight?.Dispose();_fitCenter?.Dispose();_fitLeft=null;_fitRight=null;_fitCenter=null;}
         private sealed class PanelSizeScope : IDisposable
         {
+            private readonly HudOverlayForm _owner;
+            private readonly float _previousText;
             private readonly Graphics _graphics;
             private readonly System.Drawing.Drawing2D.GraphicsState _state;
-            internal PanelSizeScope(Graphics graphics,float size,RectangleF rect)
+            internal PanelSizeScope(HudOverlayForm owner,Graphics graphics,float size,RectangleF rect,float text)
             {
+                _owner=owner;_previousText=owner._activeTextMultiplier;owner._activeTextMultiplier=text;
                 _graphics=graphics; _state=graphics.Save();
                 using(var matrix=new System.Drawing.Drawing2D.Matrix(size,0,0,size,rect.X*(1-size),rect.Y*(1-size)))
                     graphics.MultiplyTransform(matrix);
                 graphics.SetClip(rect,System.Drawing.Drawing2D.CombineMode.Intersect);
             }
-            public void Dispose() { _graphics.Restore(_state); }
+            public void Dispose() { _graphics.Restore(_state);_owner._activeTextMultiplier=_previousText; }
         }
         // Fit each field in its own column. Keep whole values and names instead
         // of allowing long modded labels to overlap the neighboring column.
-        private static void DrawFitted(Graphics g,string text,Font font,Brush brush,RectangleF box,bool right=false)
+        private void DrawFitted(Graphics g,string text,Font font,Brush brush,RectangleF box,bool right=false)
+        { DrawFittedAligned(g,text,font,brush,box,right?StringAlignment.Far:StringAlignment.Near); }
+        private void DrawCenteredFitted(Graphics g,string text,Font font,Brush brush,RectangleF box)
+        { DrawFittedAligned(g,text,font,brush,box,StringAlignment.Center); }
+        private void DrawFittedAligned(Graphics g,string text,Font font,Brush brush,RectangleF box,StringAlignment alignment)
         {
-            if(box.Width<=0 || box.Height<=0 || string.IsNullOrEmpty(text)) return;
-            using(var format=new StringFormat(StringFormat.GenericTypographic))
-            {
-                format.FormatFlags=StringFormatFlags.NoWrap;
-                format.Trimming=StringTrimming.EllipsisCharacter;
-                format.Alignment=right ? StringAlignment.Far : StringAlignment.Near;
-                format.LineAlignment=StringAlignment.Center;
-                var measured=g.MeasureString(text,font,int.MaxValue,format);
-                float fit=Math.Min(1,Math.Min(Math.Max(.8f,box.Width/Math.Max(1,measured.Width)),box.Height/Math.Max(1,measured.Height)));
-                using(var fitted=new Font(font.FontFamily,Math.Max(.5f,font.Size*fit),font.Style,GraphicsUnit.Pixel))
-                    g.DrawString(text,fitted,brush,box,format);
-            }
+            if(box.Width<=0 || box.Height<=0 || string.IsNullOrEmpty(text))return;
+            if(_fitLeft==null){_fitLeft=new StringFormat(StringFormat.GenericTypographic){FormatFlags=StringFormatFlags.NoWrap,Trimming=StringTrimming.EllipsisCharacter,Alignment=StringAlignment.Near,LineAlignment=StringAlignment.Center};_fitRight=(StringFormat)_fitLeft.Clone();_fitRight.Alignment=StringAlignment.Far;_fitCenter=(StringFormat)_fitLeft.Clone();_fitCenter.Alignment=StringAlignment.Center;}
+            var format=alignment==StringAlignment.Center?_fitCenter:alignment==StringAlignment.Far?_fitRight:_fitLeft;
+            float preferred=font.Size*(_activeTextMultiplier>0?_activeTextMultiplier:1);
+            var desired=FittedFont(font,preferred);
+            var measured=g.MeasureString(text,desired,int.MaxValue,format);
+            // Never enlarge the frame or mutate a saved font preference. Each cell bounds its text.
+            float fit=Math.Min(1,Math.Min(box.Width/Math.Max(1,measured.Width),box.Height/Math.Max(1,measured.Height)));
+            var fitted=FittedFont(font,preferred*fit);
+            var state=g.Save();
+            try {g.SetClip(box,System.Drawing.Drawing2D.CombineMode.Intersect);g.DrawString(text,fitted,brush,box,format);}
+            finally {g.Restore(state);}
         }
         private RectangleF DistressRectangle(int width,int height,float w,float h,float scale)
         {
