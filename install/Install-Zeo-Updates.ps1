@@ -1,4 +1,4 @@
-param([ValidateSet('All','Core','Nav','PDC','Ore')][string]$Plugin='All',[switch]$ValidateOnly)
+param([ValidateSet('All','Core','Nav','PDC','Ore')][string]$Plugin='All',[switch]$ValidateOnly,[switch]$FastUpdates)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Catalog-Profile.ps1')
 $root=Join-Path $env:APPDATA 'Pulsar/Legacy'
@@ -9,6 +9,7 @@ $selected=if($Plugin -eq 'All'){@('Core','Nav','PDC','Ore')}else{@($Plugin)}
 $sourceBefore=[IO.File]::ReadAllText($sourcePath);$profileBefore=[IO.File]::ReadAllText($profilePath)
 [xml]$sources=$sourceBefore;[xml]$zeoProfileDocument=$profileBefore
 Set-ZeoCatalogSource $sources
+if($FastUpdates){Set-ZeoFastUpdates $sources}
 Set-ZeoCatalogProfile $zeoProfileDocument $selected
 if($ValidateOnly){Write-Host ('Configuration preview passed for '+($selected -join ', ')+'. Nothing changed.');return}
 $busy=@(Get-Process -ErrorAction SilentlyContinue | Where-Object {$_.ProcessName -in @('Legacy','Interim','SpaceEngineers','ZeoOverlay','ZeoNavOverlay','ZeoPdcOverlay','ZeosOreOverlay')})
@@ -31,4 +32,5 @@ Write-Host ('Zeo automatic catalog updates configured: '+($selected -join ', '))
 Write-Host 'Start Space Engineers through Pulsar Legacy. It will download the published plugins and matching overlays.'
 Write-Host 'Old local DLLs remain backed by their existing files but are disabled in the current profile. Plugin settings, other plugins, workshop mods and Subsystem Targeter are unchanged.'
 Write-Host ('Profile/source backup: '+$backup)
-Write-Host 'Future releases arrive after a catalog refresh and full game restart. Pulsar may cache the source list for two hours.'
+if($FastUpdates){Write-Host 'Fast updates enabled: Pulsar checks all catalog sources on every launch. A full game restart is still required.'}
+else{Write-Host 'Future releases arrive after a catalog refresh and full game restart. Pulsar may cache the source list for two hours.'}

@@ -25,6 +25,8 @@ A source-code push is not a plugin release. Published entries pin a loader commi
 
 Standalone local DLLs do not auto-update from this catalog. Users must make the one-time switch to catalog entries. A running game is not hot-patched.
 
+For immediate Nav testing, download [Nav fast-update setup](https://github.com/logn0401-design/ZeoPluginHub/raw/refs/heads/main/install/Zeo-Nav-Fast-Update.zip), extract it, close Space Engineers, and run `FAST-NAV-UPDATE.cmd`. It enables only Nav's catalog entry, retains saved settings, backs up the active profile/source configuration, and forces a fresh Zeo source check on the next launch. It also sets Pulsar's global source-cache age to zero, so all catalog sources are checked on each future launch. A full game restart is still required to load updates; this setting must be applied separately on each player's PC.
+
 ## This release
 
 Core's MENU KEY now supports click, press a key, then APPLY; Escape/Cancel discards a draft. Existing shortcuts are retained. Clear+Apply disables Core's shortcut; Pulsar Configure can reopen it. Core also includes the accumulated HUD, refill, tracking, help and performance-candidate work. PDC and Ore preserve their existing capture UI and protect text entry from menu hotkeys. PDC now receives its overlay from the same verified catalog release as its runtime.

@@ -22,6 +22,10 @@ function Set-ZeoCatalogSource([xml]$document){
     Set-XmlText $document $hub 'Trusted' 'true'
     foreach($old in @($hub.SelectNodes('LastCheck|Hash'))){[void]$hub.RemoveChild($old)}
 }
+function Set-ZeoFastUpdates([xml]$document){
+    if($document.DocumentElement.LocalName -ne 'SourcesConfig'){throw 'Unrecognized Pulsar sources configuration.'}
+    Set-XmlText $document $document.DocumentElement 'MaxSourceAge' '0'
+}
 function Set-ZeoCatalogProfile([xml]$document,[string[]]$plugins){
     if($document.DocumentElement.LocalName -ne 'Profile'){throw 'Unrecognized Pulsar profile.'}
     $github=Ensure-XmlChild $document $document.DocumentElement 'GitHub'
