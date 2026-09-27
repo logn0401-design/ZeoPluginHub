@@ -14,6 +14,13 @@ internal static partial class Tests
         Check("Precision hysteresis holds at four degrees",hold.TryRate(f,Turn(f,Vector3D.Up,4),Vector3D.Zero,out command));
         Check("Large disturbance returns to NavOS",!hold.TryRate(f,Turn(f,Vector3D.Up,6),Vector3D.Zero,out command));
         Check("Frozen 180 remains with NavOS",!hold.TryRate(f,-f,Vector3D.Zero,out command));
+        Check("Wide flat hull chooses pitch for lower inertia",FlipAxisChoice.ShouldPitch(40,15));
+        Check("Tall narrow hull chooses yaw for lower inertia",!FlipAxisChoice.ShouldPitch(15,40));
+        Check("Nearly square hull keeps stable yaw default",!FlipAxisChoice.ShouldPitch(25,23));
+        Check("Pilot can force either 180-degree axis",FlipAxisChoice.SelectPitch(15,40,"PITCH",0,0)&&!FlipAxisChoice.SelectPitch(40,15,"YAW",0,0));
+        Check("Auto axis learns faster measured pitch",FlipAxisChoice.SelectPitch(15,40,"AUTO",16,25));
+        Check("Auto axis learns faster measured yaw",!FlipAxisChoice.SelectPitch(40,15,"AUTO",30,18));
+        Check("Auto axis keeps hull fallback until both axes are measured",!FlipAxisChoice.SelectPitch(15,40,"AUTO",16,0));
         foreach(var axis in new[]{Vector3D.Right,Vector3D.Up,Vector3D.Forward}) {
             var omega=axis*(1.6*Math.PI/180);hold.TryRate(f,f,omega,out command);
             Check("Aligned angular motion is opposed on "+axis,Vector3D.Dot(command,omega)<0);

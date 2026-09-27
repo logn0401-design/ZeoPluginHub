@@ -24,8 +24,12 @@ internal static partial class Tests
         var c=new GpsDto {Name="Alpha Station",X=7,Y=8,Z=9};
         var all=new List<GpsDto> {a,b,c};
         Check("Blank GPS search preserves all destinations and order",GpsSearch.Filter(all,"  ").SequenceEqual(all));
-        Check("GPS substring search ignores case",GpsSearch.Filter(all,"pHa st").SequenceEqual(new[]{a,c}));
-        Check("GPS terms match in either order",GpsSearch.Filter(all,"station ALPHA").SequenceEqual(new[]{a,c}));
+        Check("GPS prefix search ignores case",GpsSearch.Filter(all,"aLpHa st").SequenceEqual(new[]{a,c}));
+        Check("GPS does not match text in the middle of a name",GpsSearch.Filter(all,"Station").Count==0);
+        var names=new[]{new GpsDto{Name="Home"},new GpsDto{Name="Hauler"},new GpsDto{Name="JustTooToxic Base"},new GpsDto{Name="JustTooToxic Mine"},new GpsDto{Name="Other Home"}};
+        Check("H shows Home and Hauler only",GpsSearch.Filter(names,"H").Count==2);
+        Check("Home narrows the prefix",GpsSearch.Filter(names,"home").Single().Name=="Home");
+        Check("Just shows all JustTooToxic GPS names",GpsSearch.Filter(names,"Just").Count==2);
         Check("GPS no-match search is empty",GpsSearch.Filter(all,"missing").Count==0);
         Check("Null GPS list is supported",GpsSearch.Filter(null,"a").Count==0);
         Check("Clearing GPS search restores all options",GpsSearch.Filter(all,"").Count==3);

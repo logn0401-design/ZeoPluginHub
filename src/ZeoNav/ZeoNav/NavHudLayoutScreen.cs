@@ -14,10 +14,11 @@ namespace ZeoNav
     {
         public readonly NavLayoutDraft Draft;
         private readonly double originalX,originalY,originalWidth,originalHeight;
-        public NavLayoutModel(NavConfig config)
+        public NavLayoutModel(NavConfig config,bool targetLock=false)
         {
-            originalX=config.HudX; originalY=config.HudY; originalWidth=Size(config.HudWidth); originalHeight=Size(config.HudHeight);
-            Draft=new NavLayoutDraft { Token=Guid.NewGuid().ToString("N"),X=originalX,Y=originalY,WidthScale=originalWidth,HeightScale=originalHeight };
+            originalX=targetLock?config.TargetHudX:config.HudX; originalY=targetLock?config.TargetHudY:config.HudY;
+            originalWidth=Size(targetLock?config.TargetHudWidth:config.HudWidth); originalHeight=Size(targetLock?config.TargetHudHeight:config.HudHeight);
+            Draft=new NavLayoutDraft { Token=Guid.NewGuid().ToString("N"),TargetLock=targetLock,X=originalX,Y=originalY,WidthScale=originalWidth,HeightScale=originalHeight };
         }
         public void Move(double left,double top,double panelW,double panelH,int viewportW,int viewportH)
         {
@@ -25,7 +26,7 @@ namespace ZeoNav
                 !Finite(left) || !Finite(top) || !Finite(panelW) || !Finite(panelH)) return;
             left=Math.Max(6,Math.Min(Math.Max(6,viewportW-panelW-6),left));
             top=Math.Max(6,Math.Min(Math.Max(6,viewportH-panelH-6),top));
-            Draft.X=Math.Max(-.98,Math.Min(.98,left*2/viewportW-1));
+            Draft.X=Math.Max(-.98,Math.Min(.98,(left+(Draft.TargetLock?panelW/2:0))*2/viewportW-1));
             Draft.Y=Math.Max(-.98,Math.Min(.98,1-top*2/viewportH));
         }
         private static bool Finite(double n) { return !double.IsNaN(n) && !double.IsInfinity(n); }
@@ -43,10 +44,10 @@ namespace ZeoNav
         public Dictionary<string,object> Changes()
         {
             var result=new Dictionary<string,object>();
-            if(Math.Abs(Draft.X-originalX)>1e-9) result["HudX"]=Draft.X;
-            if(Math.Abs(Draft.Y-originalY)>1e-9) result["HudY"]=Draft.Y;
-            if(Math.Abs(Draft.WidthScale-originalWidth)>1e-9)result["HudWidth"]=Draft.WidthScale;
-            if(Math.Abs(Draft.HeightScale-originalHeight)>1e-9)result["HudHeight"]=Draft.HeightScale;
+            if(Math.Abs(Draft.X-originalX)>1e-9) result[Draft.TargetLock?"TargetHudX":"HudX"]=Draft.X;
+            if(Math.Abs(Draft.Y-originalY)>1e-9) result[Draft.TargetLock?"TargetHudY":"HudY"]=Draft.Y;
+            if(Math.Abs(Draft.WidthScale-originalWidth)>1e-9)result[Draft.TargetLock?"TargetHudWidth":"HudWidth"]=Draft.WidthScale;
+            if(Math.Abs(Draft.HeightScale-originalHeight)>1e-9)result[Draft.TargetLock?"TargetHudHeight":"HudHeight"]=Draft.HeightScale;
             return result;
         }
     }
@@ -58,20 +59,30 @@ namespace ZeoNav
         [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         private readonly NavUiHost host;
-        private readonly NavLayoutModel model;
+        private NavLayoutModel model;
+        private readonly NavLayoutModel tripModel, lockModel;
+        private readonly float toolbarOffset;
+        internal static float ToolbarOffset(bool targetLock,double y){return targetLock&&y>=0?.70f:0;}
         private readonly MyGuiControlLabel status;
         private bool down=true,dragging,placeSelected;
         private double offsetX,offsetY,startX,startY,startW,startH;
         private NavLayoutBounds resizeStart; private int edges;
-        internal NavHudLayoutScreen(NavUiHost host)
+        internal NavHudLayoutScreen(NavUiHost host,bool targetLock=false)
             : base(new Vector2(.5f,.5f),new Vector4(0,0,0,0),new Vector2(1,1),true)
         {
-            this.host=host; model=new NavLayoutModel(host.Store.Read()); host.Layout=model.Draft; host.Bounds=null;
+            this.host=host;
+            tripModel=new NavLayoutModel(host.Store.Read()); lockModel=new NavLayoutModel(host.Store.Read(),true);
+            model=targetLock?lockModel:tripModel; host.Layout=model.Draft; host.Bounds=null;
+            toolbarOffset=ToolbarOffset(targetLock,model.Draft.Y);
             DrawMouseCursor=true; CloseButtonEnabled=false; EnabledBackgroundFade=false;
             CanHideOthers=false; CanBeHidden=false;
-            Label(-.354f,-.460f,"ZEO NAV // EDIT TRIP HUD",.75f);
-            Label(-.354f,-.429f,"Drag inside to move; drag edges or corners to resize. Text follows panel height.",.50f);
-            Button(-.27f,-.387f,.18f,"PLACE PANEL",delegate { placeSelected=true; dragging=false; });
+            Label(-.354f,-.460f,"ZEO NAV // MOVE / RESIZE HUD",.65f);
+            Button(.285f,-.460f,.20f,"TRIP / LOCK",delegate {
+                model=ReferenceEquals(model,tripModel)?lockModel:tripModel;
+                host.Layout=model.Draft; host.Bounds=null; dragging=false; placeSelected=false; down=true;
+            });
+            Label(-.354f,-.429f,"TRIP / LOCK selects a panel. Drag inside to move; edges or corners resize.",.50f);
+            Button(-.27f,-.387f,.18f,targetLock?"PLACE LOCK":"PLACE PANEL",delegate { placeSelected=true; dragging=false; });
             Button(-.072f,-.387f,.18f,"UNDO",delegate { model.Undo(); dragging=false; });
             Button(.126f,-.387f,.18f,"SAVE",Save);
             Button(.313f,-.387f,.16f,"CANCEL",delegate { CloseScreen(); });
@@ -81,8 +92,8 @@ namespace ZeoNav
         public override bool Update(bool hasFocus)
         {
             bool result=base.Update(hasFocus);
-            var top=MyGuiManager.GetScreenCoordinateFromNormalizedCoordinate(new Vector2(.13f,.01f));
-            var bottom=MyGuiManager.GetScreenCoordinateFromNormalizedCoordinate(new Vector2(.905f,.178f));
+            var top=MyGuiManager.GetScreenCoordinateFromNormalizedCoordinate(new Vector2(.13f,.01f+toolbarOffset));
+            var bottom=MyGuiManager.GetScreenCoordinateFromNormalizedCoordinate(new Vector2(.905f,.178f+toolbarOffset));
             model.Draft.ToolbarX=top.X; model.Draft.ToolbarY=top.Y;
             model.Draft.ToolbarW=bottom.X-top.X; model.Draft.ToolbarH=bottom.Y-top.Y;
             var snapshot=host.Snapshot(); var bounds=host.Bounds;
@@ -114,14 +125,14 @@ namespace ZeoNav
             }
             if(!pressed) dragging=false;
             down=pressed;
-            status.Text=placeSelected ? "Drag below this toolbar to place the trip panel." : "SAVE commits layout. UNDO restores starting size and position. ESC cancels.";
+            status.Text=placeSelected ? (model.Draft.TargetLock?"Drag outside this toolbar to place the lock banner.":"Drag outside this toolbar to place the trip panel.") : "SAVE commits layout. UNDO restores starting position. ESC cancels.";
             return result;
         }
         private void Save()
         {
             try
             {
-                var changes=model.Changes();
+                var changes=tripModel.Changes(); foreach(var change in lockModel.Changes()) changes[change.Key]=change.Value;
                 if(changes.Count>0)
                 {
                     if(host.Bounds==null || (DateTime.UtcNow-host.BoundsUtc).TotalSeconds>=1) throw new InvalidOperationException("Wait for fresh preview before saving.");
@@ -134,12 +145,12 @@ namespace ZeoNav
         protected override void OnClosed() { host.Layout=null; host.Bounds=null; base.OnClosed(); }
         private MyGuiControlLabel Label(float x,float y,string text,float scale)
         {
-            var label=new MyGuiControlLabel(new Vector2(x,y),null,text,new Vector4(.82f,.91f,.94f,1),scale,null,MyGuiDrawAlignEnum.HORISONTAL_LEFT_AND_VERTICAL_CENTER);
+            var label=new MyGuiControlLabel(new Vector2(x,y+toolbarOffset),null,text,new Vector4(.82f,.91f,.94f,1),scale,null,MyGuiDrawAlignEnum.HORISONTAL_LEFT_AND_VERTICAL_CENTER);
             Controls.Add(label); return label;
         }
         private void Button(float x,float y,float width,string text,Action action)
         {
-            Controls.Add(new MyGuiControlButton(new Vector2(x,y),MyGuiControlButtonStyleEnum.Rectangular,new Vector2(width,.044f),null,
+            Controls.Add(new MyGuiControlButton(new Vector2(x,y+toolbarOffset),MyGuiControlButtonStyleEnum.Rectangular,new Vector2(width,.044f),null,
                 MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,null,new StringBuilder(text),.60f,
                 MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,MyGuiControlHighlightType.WHEN_CURSOR_OVER,delegate(MyGuiControlButton b) { action(); }));
         }

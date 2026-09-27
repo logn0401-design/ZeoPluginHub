@@ -47,7 +47,7 @@ namespace ZeoNav
     {
         internal bool Selecting,Confirmed;
         internal long LockedId,CandidateId;
-        internal string Status="Hold Left Ctrl and click a Spectrum signal to lock.";
+        internal string Status="Hold the configured target key and click a Spectrum signal to lock.";
         internal readonly Dictionary<long,TargetTrack> Tracks=new Dictionary<long,TargetTrack>();
         private readonly List<long> candidates=new List<long>();
         private int cycle;
@@ -62,7 +62,7 @@ namespace ZeoNav
             LockedId=CandidateId;Confirmed=true;Selecting=false;Status="SIGNAL LOCKED / "+Locked.Sample.Label;
         }
         internal void Cancel(){Selecting=false;CandidateId=0;hasPointer=false;}
-        internal void ClearLock(){Cancel();Confirmed=false;LockedId=0;Status="TARGET CLEARED / hold Left Ctrl to select again";}
+        internal void ClearLock(){Cancel();Confirmed=false;LockedId=0;Status="TARGET CLEARED / hold target key to select again";}
         internal void Cycle(){cycle++;}
         internal void Aim(int tick,double now,MatrixD camera,Func<Vector3D,Vector3D> project,Vector2D pointer,int width,int height)
         {

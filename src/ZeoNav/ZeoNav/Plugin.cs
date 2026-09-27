@@ -20,7 +20,7 @@ namespace ZeoNav
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.1.15-CTRL-RETICLE-INTERCEPT-FLIP";
+        public const string Version = "1.1.22";
         private string catalogOverlayPath;
 
         // Pulsar supplies this hash-verified package before Init. Settings remain in dataDir.
@@ -66,6 +66,10 @@ namespace ZeoNav
         private long gameHwnd;
         private int gamePid;
         private bool disposed;
+        private string flightNotice="",noticePhase="";
+        private DateTime noticeUntil;
+        private void FlightNotice(string message,string phase="CHECK FLIGHT")
+        {flightNotice=message;noticePhase=phase;noticeUntil=DateTime.UtcNow.AddSeconds(4);Log("FLIGHT NOTICE // "+message);try{MyAPIGateway.Utilities.ShowNotification(message,4000,"White");}catch{}}
         private DateTime lastOverlayLaunch = DateTime.MinValue;
         private bool hasSelectedGps;
         private string selectedGpsName = "";
@@ -197,6 +201,7 @@ namespace ZeoNav
             if(docking!=null&&docking.Active){s.State="DOCKING";s.Phase="DOCK "+docking.Stage;s.Destination=docking.Destination;s.DistanceMeters=docking.Distance;s.EtaSeconds=-1;s.WarningText=docking.Status;s.HudVisible=true;s.SignalGovernorState="DOCK / RCS ONLY";s.SpeedCapSource="DOCK RCS";s.SpeedCapMps=docking.SpeedLimitMps;s.CommandSpeedMps=docking.SpeedLimitMps;s.MaxDriveSigKm=ApproachProfile.Arrival(config);}
             else if(refuel!=null&&refuel.Active){s.State="REFUEL";s.Phase="REFUEL";s.WarningText=refuel.Status;s.HudVisible=true;}
             FillTargetSnapshot(s);
+            if(DateTime.UtcNow<noticeUntil){s.HudVisible=true;s.WarningText=flightNotice;if(!targetFlight.Active&&!nav.IsControlling&&!docking.Active){s.State=noticePhase;s.Phase=noticePhase;}}
             return s;
         }
         private void FillTargetSnapshot(NavSnapshot s)
@@ -275,10 +280,14 @@ namespace ZeoNav
         }
         private void BeginTargetFlight(bool intercept)
         {
-            if(targetFlight.Active){targetFlight.Abort("Target flight cancelled.");return;}
-            if(!targets.Confirmed){targetFlight.Status="Select and confirm a fresh Spectrum contact first.";return;}
+            if(targetFlight.Active&&targetFlight.RequestedIntercept==intercept){AbortAll("Target flight cancelled.");return;}
+            if(!targets.Confirmed){targetFlight.Status="Select and confirm a fresh Spectrum contact first.";FlightNotice(targetFlight.Status);return;}
+            if(!targetFlight.CanStart(intercept,MyAPIGateway.Session.GameplayFrameCounter,targetClock.Elapsed.TotalSeconds))
+            {FlightNotice(targetFlight.Status+(targetFlight.Active?" Current mode continues.":""));return;}
+            if(targetFlight.Active)targetFlight.Abort("Switching target-flight mode.");
             nav.Abort("Target flight selected.");docking.Abort("Target flight selected.");refuel.Stop("Target flight selected.");
             targetFlight.Start(intercept,MyAPIGateway.Session.GameplayFrameCounter,targetClock.Elapsed.TotalSeconds);
+            FlightNotice(targetFlight.Active?(intercept?"Intercept engaged.":"Matching velocity."):targetFlight.Status);
         }
         private bool SessionReady()
         {
@@ -369,15 +378,15 @@ namespace ZeoNav
 
         private void HandleHotkeys()
         {
-            bool ctrlOpen=targetCtrl.Observe(NavTargetPickerScreen.CtrlHeld,config.TargetCtrlAim&&!NavNativeUi.CapturingKey&&!NavNativeUi.IsOpen&&!menuVisible&&ship!=null&&!MyAPIGateway.Gui.ChatEntryVisible&&!MyAPIGateway.Gui.IsCursorVisible&&WinRect.IsForeground(new IntPtr(gameHwnd)));
-            if(targetPicker!=null)return; // The transparent picker owns input through mouse release.
+            bool ctrlOpen=targetCtrl.Observe(NavTargetPickerScreen.HoldPressed(config.TargetAimHoldKey),!NavNativeUi.CapturingKey&&!NavNativeUi.IsOpen&&!menuVisible&&ship!=null&&!MyAPIGateway.Gui.ChatEntryVisible&&!MyAPIGateway.Gui.IsCursorVisible&&WinRect.IsForeground(new IntPtr(gameHwnd)));
+            if(!NavNativeUi.CapturingKey&&WinRect.IsForeground(new IntPtr(gameHwnd))&&EmergencyKeyNew(config.AbortKey)) {AbortAll("ABORT KEY");return;}
+            if(targetPicker!=null)return; // Picker owns ordinary actions, but never blocks emergency release.
             if(NavNativeUi.CapturingKey) return;
             if (KeyNew(config.MenuKey))
             {
                 RefreshGps();
                 ToggleMenu();
             }
-            if (KeyNew(config.AbortKey)) {AbortAll("ABORT KEY");return;}
             if(targets.Selecting&&KeyNew("Escape")){targets.Cancel();return;}
             // Text entry and dropdown navigation must not launch a route or flip.
             // The configured emergency abort remains available while the menu is open.
@@ -399,6 +408,9 @@ namespace ZeoNav
                 else if (nav.HasLastDestination) nav.RestartLastRoute();
             }
         }
+
+        private bool EmergencyKeyNew(string key)
+        {try{var b=NavKeyBinding.Parse(key);var i=MyAPIGateway.Input;return b.Key!=MyKeys.None&&i.IsNewKeyPressed(b.Key)&&b.EmergencyMatches(i.IsAnyCtrlKeyPressed(),i.IsAnyAltKeyPressed(),i.IsAnyShiftKeyPressed());}catch{return false;}}
 
         private bool KeyNew(string key,bool allowLookAlt=false)
         {
@@ -471,7 +483,14 @@ namespace ZeoNav
         }
 
         private void AbortAll(string reason,bool closePicker=true)
-        {if(closePicker)CloseTargetPicker();targetFlight?.Abort(reason);targets.Cancel();docking?.Abort(reason);refuel?.Stop(reason);nav?.Abort(reason);}
+        {
+            bool released=true;
+            Action<Action> attempt=action=>{try{action();}catch(Exception ex){released=false;Log("ABORT RELEASE ERROR // "+ex);}};
+            if(closePicker)attempt(CloseTargetPicker);
+            attempt(()=>targetFlight?.Abort(reason));attempt(()=>targets.Cancel());attempt(()=>docking?.Abort(reason));
+            attempt(()=>refuel?.Stop(reason));attempt(()=>nav?.Abort(reason));
+            FlightNotice(released?"Aborted - controls released.":"Abort requested - check ship overrides; release error logged.",released?"ABORTED":"ABORT ERROR");
+        }
         private void BeginDock(bool quick)
         {
             if(docking.Active){docking.Abort("Docking cancelled.");return;}
@@ -639,6 +658,23 @@ namespace ZeoNav
             if(c.ConfigVersion<13)c.ConfigVersion=13;
             if(c.ConfigVersion<14){if(Math.Abs(c.DockTransitMps-5)<.001)c.DockTransitMps=6;c.ConfigVersion=14;}
             if(c.ConfigVersion<15){c.TargetCtrlAim=true;c.ConfigVersion=15;}
+            if(c.ConfigVersion<16){c.TargetHudX=0;c.TargetHudY=.96;c.ConfigVersion=16;}
+            if(c.ConfigVersion<17)
+            {
+                c.TargetAimHoldKey=c.TargetCtrlAim?"LeftControl":"None";
+                c.FlipAxisMode="AUTO";c.FlipTurnMode="AUTO";c.RcsFlipAdvantagePct=30;
+                c.DampenerEntryMaxMps=100;c.TerminalEnvelopeMeters=1000;c.TerminalCruiseMps=18;
+                c.TerminalHandoffMaxMps=50;c.TerminalDampeners=true;c.ConfigVersion=17;
+            }
+            if(string.IsNullOrWhiteSpace(c.TargetAimHoldKey))c.TargetAimHoldKey="None";
+            try{NavKeyBinding.Parse(c.TargetAimHoldKey);}catch{c.TargetAimHoldKey="LeftShift";}
+            c.FlipAxisMode=new[]{"AUTO","PITCH","YAW"}.Contains(c.FlipAxisMode)?c.FlipAxisMode:"AUTO";
+            c.FlipTurnMode=new[]{"AUTO","GYRO","RCS"}.Contains(c.FlipTurnMode)?c.FlipTurnMode:"AUTO";
+            c.RcsFlipAdvantagePct=SignalBudget.Finite(c.RcsFlipAdvantagePct)?ClampD(c.RcsFlipAdvantagePct,0,100):30;
+            c.DampenerEntryMaxMps=SignalBudget.Finite(c.DampenerEntryMaxMps)?ClampD(c.DampenerEntryMaxMps,0,100):100;
+            c.TerminalEnvelopeMeters=SignalBudget.Finite(c.TerminalEnvelopeMeters)?ClampD(c.TerminalEnvelopeMeters,1000,5000):1000;
+            c.TerminalCruiseMps=SignalBudget.Finite(c.TerminalCruiseMps)?ClampD(c.TerminalCruiseMps,1,30):18;
+            c.TerminalHandoffMaxMps=SignalBudget.Finite(c.TerminalHandoffMaxMps)?ClampD(c.TerminalHandoffMaxMps,5,100):50;
             c.DockTransitMps=SignalBudget.Finite(c.DockTransitMps)?ClampD(c.DockTransitMps,.2,6):6;
             c.FlipTimeSeconds = SignalBudget.Finite(c.FlipTimeSeconds)?Math.Max(1, Math.Min(1800, c.FlipTimeSeconds)):180;
             c.BrakeSafety = Math.Max(1.0, Math.Min(2.0, c.BrakeSafety));
@@ -664,6 +700,16 @@ namespace ZeoNav
             c.HudWidth=NavLayoutModel.Size(c.HudWidth); c.HudHeight=NavLayoutModel.Size(c.HudHeight);
             c.HudX = ClampD(c.HudX, -.98, .98);
             c.HudY = ClampD(c.HudY, -.98, .98);
+            if (c.ConfigVersion < 18) {
+                if (Math.Abs(c.TargetHudX) < .001 && Math.Abs(c.TargetHudY - .96) < .001) { c.TargetHudX = .76; c.TargetHudY = -.76; }
+                c.TargetHudWidth = c.TargetHudHeight = c.TargetHudTextScale = 1;
+                c.ConfigVersion = 18;
+            }
+            c.TargetHudWidth = ClampD(c.TargetHudWidth <= 0 ? 1 : c.TargetHudWidth, .5, 3);
+            c.TargetHudHeight = ClampD(c.TargetHudHeight <= 0 ? 1 : c.TargetHudHeight, .5, 3);
+            c.TargetHudTextScale = ClampD(c.TargetHudTextScale <= 0 ? 1 : c.TargetHudTextScale, .5, 3);
+            c.TargetHudX = ClampD(c.TargetHudX, -.98, .98);
+            c.TargetHudY = ClampD(c.TargetHudY, -.98, .98);
             c.BackingOpacity = Math.Max(0, Math.Min(245, c.BackingOpacity));
             c.BorderWidth = ClampD(c.BorderWidth, .25, 4.0);
             c.InnerPadding = ClampD(c.InnerPadding, .40, 2.25);

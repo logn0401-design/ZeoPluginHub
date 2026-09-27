@@ -21,12 +21,12 @@ namespace ZeoNavOverlay
         // Increment when a new field needs an explicit upgrade default. DataContract
         // deserialization does not apply field initializers to members missing from an
         // older config file, so this protects one-click upgrades that preserve config.json.
-        [DataMember] public int ConfigVersion = 15;
+        [DataMember] public int ConfigVersion = 17;
         [DataMember] public string TargetSelectKey="None", TargetCycleKey="None", InterceptKey="None", MatchVelocityKey="None";
+        [DataMember] public string TargetAimHoldKey="LeftShift";
         [DataMember] public double InterceptStandOffKm=5;
         [DataMember] public bool MatchKeep=true, MatchRcsOnly=false;
         [DataMember] public bool TargetCtrlAim=true;
-        [DataMember] public bool RcsTurnAssist=true;
         [DataMember] public string QuickDockKey = "None", RefuelKey = "None";
         [DataMember] public double DockScanMeters = 500, DockStandOffMeters = 50, DockApproachMps = 1, DockTransitMps = 6;
         [DataMember] public bool RefuelAfterDock = false;
@@ -49,6 +49,11 @@ namespace ZeoNavOverlay
         [DataMember] public double HudWidth = 1, HudHeight = 1;
         [DataMember] public double HudX = -0.88;
         [DataMember] public double HudY = 0.72;
+        [DataMember] public double TargetHudX = 0.76;
+        [DataMember] public double TargetHudY = -0.76;
+        [DataMember] public double TargetHudWidth = 1;
+        [DataMember] public double TargetHudHeight = 1;
+        [DataMember] public double TargetHudTextScale = 1;
         [DataMember] public double GlobalScale = 1.0;
         [DataMember] public double PanelScale = 1.0;
         [DataMember] public double DestinationScale = 1.0;
@@ -85,7 +90,11 @@ namespace ZeoNavOverlay
         [DataMember] public int DriveSlider = 45; // legacy migration only
         [DataMember] public double MaxDriveSigKm = 125.0;
         [DataMember] public double FlipTimeSeconds = 20.0;
+        [DataMember] public string FlipAxisMode="AUTO", FlipTurnMode="AUTO";
+        [DataMember] public double RcsFlipAdvantagePct=30;
         [DataMember] public double BrakeSafety = 1.12;
+        [DataMember] public double DampenerEntryMaxMps=100, TerminalEnvelopeMeters=1000, TerminalCruiseMps=18, TerminalHandoffMaxMps=50;
+        [DataMember] public bool TerminalDampeners=true;
         [DataMember] public double ArrivalRadiusMeters = 5.0;
         [DataMember] public double ArrivalSpeedMps = 0.35;
         [DataMember] public double SpeedCapOverride = 0.0;
@@ -210,6 +219,7 @@ namespace ZeoNavOverlay
     public sealed class NavLayoutDraft
     {
         [DataMember] public string Token;
+        [DataMember] public bool TargetLock;
         [DataMember] public double X, Y;
         [DataMember] public double WidthScale = 1, HeightScale = 1;
         [DataMember] public double ToolbarX, ToolbarY, ToolbarW, ToolbarH;

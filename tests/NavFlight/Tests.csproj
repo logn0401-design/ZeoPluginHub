@@ -70,4 +70,5 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+<ItemGroup><Compile Include="../../src/Shared/NativeRowTextbox.cs" Link="Shared/NativeRowTextbox.cs" /><Compile Include="../../src/Shared/SettingHelp.cs" Link="Shared/SettingHelp.cs" /></ItemGroup>
 </Project>

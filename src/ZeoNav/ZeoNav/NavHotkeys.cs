@@ -39,8 +39,12 @@ namespace ZeoNav
         }
         internal bool Matches(bool ctrl,bool alt,bool shift,bool allowLookAlt=false)
         { return Ctrl==ctrl && Shift==shift && (Alt==alt || (allowLookAlt&&!Alt)); }
+        internal bool EmergencyMatches(bool ctrl,bool alt,bool shift)
+        {return (!Ctrl||ctrl)&&(!Alt||alt)&&(!Shift||shift);}
         internal static bool CaptureKey(MyKeys key)
         { string name=key.ToString();return key!=MyKeys.None&&key!=MyKeys.Escape&&!name.Contains("Control")&&!name.Contains("Shift")&&!name.Contains("Alt")&&name!="Menu"; }
+        internal static bool CaptureHoldKey(MyKeys key)
+        {return key!=MyKeys.None&&key!=MyKeys.Escape&&key!=MyKeys.Control&&key!=MyKeys.Shift&&key!=MyKeys.Alt;}
         internal static string Capture(MyKeys key,bool ctrl,bool alt,bool shift)
         { return Parse((ctrl?"Ctrl+":"")+(alt?"Alt+":"")+(shift?"Shift+":"")+key).Text; }
     }
@@ -58,7 +62,7 @@ namespace ZeoNav
     }
     internal static class NavHotkeys
     {
-        internal static readonly string[] Keys={"MenuKey","StartKey","AbortKey","ManualFlipKey","SignalUpKey","SignalDownKey","QuickDockKey","RefuelKey","TargetSelectKey","TargetCycleKey","InterceptKey","MatchVelocityKey"};
+        internal static readonly string[] Keys={"MenuKey","StartKey","AbortKey","ManualFlipKey","SignalUpKey","SignalDownKey","QuickDockKey","RefuelKey","TargetAimHoldKey","TargetSelectKey","TargetCycleKey","InterceptKey","MatchVelocityKey"};
         internal static bool Unique(NavConfig c,string field)
         {
             try {
@@ -66,7 +70,7 @@ namespace ZeoNav
                 return key.Key!=MyKeys.None && !Keys.Where(f=>f!=field).Any(f=>Conflicts(key,field,NavKeyBinding.Parse((string)typeof(NavConfig).GetField(f).GetValue(c)),f));
             } catch {return false;}
         }
-        private static bool LookKey(string field){return field=="TargetSelectKey"||field=="TargetCycleKey";}
+        private static bool LookKey(string field){return field=="TargetAimHoldKey"||field=="TargetSelectKey"||field=="TargetCycleKey";}
         private static bool Conflicts(NavKeyBinding a,string af,NavKeyBinding b,string bf)
         {return a.Key!=MyKeys.None && a.Key==b.Key && a.Ctrl==b.Ctrl && a.Shift==b.Shift && (a.Alt==b.Alt||LookKey(af)||LookKey(bf));}
         internal static void ValidateNewBindings(NavConfig c)

@@ -16,7 +16,7 @@ internal static partial class Tests
             string p = Path.Combine(gameBin, new AssemblyName(e.Name).Name + ".dll");
             return File.Exists(p) ? Assembly.LoadFrom(p) : null;
         };
-        return Run();
+        try{return Run();}catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }
     private static void Check(string name, bool ok)
     {
@@ -26,10 +26,22 @@ internal static partial class Tests
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int Run()
     {
+        AdaptiveTests();
         CatalogTests();
         DriveGpsTests();
         AttitudeTests();
+        Check("Early dampener handoff rejects over 100 m/s",!NavController.EarlyDampenerEnvelope(100.1,1000,10,5));
+        Check("Early dampener handoff needs braking room",!NavController.EarlyDampenerEnvelope(100,300,10,5));
+        Check("Early dampener handoff permits verified close-range stop",NavController.EarlyDampenerEnvelope(80,500,10,5));
+        Check("Early dampener handoff rejects weak RCS",!NavController.EarlyDampenerEnvelope(80,500,.5,5));
+        DockTests();
+        DockReferenceTests();
+        DockPaceTests();
         ServerTests();
+        MotionTests(); TargetTests();
+        EngagementTests();
+        AutoDockTests();
+        PickerTests();
         double weak = .1f, strong = .4f;
         double emission = 4 * Math.PI * weak * 125000 * 125000;
         Check("Spectrum float-metre conversion returns 125 km", Math.Abs(SignalBudget.RangeKm(emission, weak) - 125) < 1e-5);
@@ -100,7 +112,12 @@ internal static partial class Tests
 
         // Exercise the actual reflection binding against the installed mod's precise
         // public/private shape, using a fixture (no game or live mod instance).
+        var oldSession=Sandbox.ModAPI.MyAPIGateway.Session;
+        var oldUtilities=Sandbox.ModAPI.MyAPIGateway.Utilities;
+        Sandbox.ModAPI.MyAPIGateway.Session=(VRage.Game.ModAPI.IMySession)new ApiTestProxy(typeof(VRage.Game.ModAPI.IMySession)).GetTransparentProxy();
+        Sandbox.ModAPI.MyAPIGateway.Utilities=(VRage.Game.ModAPI.IMyUtilities)new ApiTestProxy(typeof(VRage.Game.ModAPI.IMyUtilities)).GetTransparentProxy();
         var adapter = new SpectrumAdapter(Console.WriteLine);
+        adapter.Init();
         var backend = new Spectrum.ApiBackend();
         var initialize = typeof(SpectrumAdapter).GetMethod("InitializeApi", BindingFlags.NonPublic | BindingFlags.Instance);
         var endpoints = new Dictionary<string, Delegate> { { "GetClientDetections", new Func<byte[]>(backend.GetClientDetections) } };
@@ -111,6 +128,8 @@ internal static partial class Tests
         initialize.Invoke(adapter, new object[] { "init" });
         Check("Init self-echo does not disturb binding", adapter.Ready);
         adapter.Dispose();
+        Sandbox.ModAPI.MyAPIGateway.Session=oldSession;
+        Sandbox.ModAPI.MyAPIGateway.Utilities=oldUtilities;
         Check("Dispose removes mod event subscription and cached identity", !adapter.Ready && Spectrum.SelfEmissionPacket.Subscribers == 0 && adapter.EmitterId == 0);
 
         var nav = new NavController(() => null, () => new NavConfig(), () => null, Console.WriteLine);

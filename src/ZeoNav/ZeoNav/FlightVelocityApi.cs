@@ -11,12 +11,15 @@ namespace ZeoNav
         private const long Channel=9806650;
         private Func<IMyCubeGrid,Vector3D> read;
         private object utilities;
+        private Action unregister;
         private int requested=-10000;
         internal void Update(int frame)
         {
-            if(MyAPIGateway.Utilities==null)return;
-            if(utilities!=MyAPIGateway.Utilities){Reset();utilities=MyAPIGateway.Utilities;MyAPIGateway.Utilities.RegisterMessageHandler(Channel,Receive);}
-            if(read==null&&frame-requested>=120){requested=frame;MyAPIGateway.Utilities.SendModMessage(Channel,"init");}
+            var owner=MyAPIGateway.Utilities;
+            if(!ReferenceEquals(utilities,owner))Reset();
+            if(owner==null)return;
+            if(utilities==null){owner.RegisterMessageHandler(Channel,Receive);utilities=owner;unregister=()=>owner.UnregisterMessageHandler(Channel,Receive);}
+            if(read==null&&(frame<requested||frame-requested>=120)){requested=frame;MyAPIGateway.Utilities.SendModMessage(Channel,"init");}
         }
         internal void Receive(object payload)
         {
@@ -28,7 +31,7 @@ namespace ZeoNav
         internal bool TryRead(IMyCubeGrid grid,out Vector3D velocity)
         {velocity=Vector3D.Zero;if(read==null||grid==null)return false;try{velocity=read(grid);return true;}catch{return false;}}
         internal void Reset()
-        {try{if(utilities!=null)MyAPIGateway.Utilities?.UnregisterMessageHandler(Channel,Receive);}catch{}utilities=null;read=null;requested=-10000;}
+        {try{unregister?.Invoke();}catch{}utilities=null;unregister=null;read=null;requested=-10000;}
     }
 
     internal static class PilotLook

@@ -31,12 +31,12 @@ namespace ZeoNav
             }
             catch(Exception ex) { screen=null; host.Log("Native Nav UI failed: "+ex); return false; }
         }
-        public static void BeginLayout(NavUiHost host)
+        public static void BeginLayout(NavUiHost host,bool targetLock=false)
         {
             try
             {
                 host.EnsureOverlay();
-                var next=new NavHudLayoutScreen(host); editor=next;
+                var next=new NavHudLayoutScreen(host,targetLock); editor=next;
                 next.Closed+=delegate { if(ReferenceEquals(editor,next)) editor=null; };
                 MyGuiSandbox.AddScreen(next);
             }
@@ -57,6 +57,7 @@ namespace ZeoNav
         private readonly NavUiModel _model;
         private readonly List<Func<bool>> _editors=new List<Func<bool>>();
         private NavKeyDraft _keyDraft;
+        private string _keyCaptureField;
         private Action _refreshKey;
         internal bool ListeningForKey {get{return _keyDraft!=null&&_keyDraft.Listening;}}
         private static readonly int[] LastViews=new int[NavUiCatalog.Pages.Length];
@@ -144,7 +145,7 @@ namespace ZeoNav
                 var rows=NavUiCatalog.Options.Where(o=>o.Page==NavUiCatalog.Pages[_page]).ToArray();
                 int views=Math.Max(1,(rows.Length+RowsPerView-1)/RowsPerView);
                 int view=LastViews[_page]=Math.Max(0,Math.Min(views-1,LastViews[_page]));
-                Label(-.354f,-.231f,NavUiCatalog.Pages[_page]+(_page==0 ? "  //  v1.1.15 PREVIEW" : "  /  "+(view+1)+" OF "+views),.68f);
+                Label(-.354f,-.231f,NavUiCatalog.Pages[_page]+(_page==0 ? "  //  v1.1.21 TEST" : "  /  "+(view+1)+" OF "+views),.68f);
                 if(_page==0)
                 {
                     BuildGps();
@@ -162,11 +163,12 @@ namespace ZeoNav
                 else if(_page==6)
                 {
                     for(int i=0;i<rows.Length;i++)AddRow(rows[i],-.16f+i*.059f);
-                    Label(-.354f,.045f,"Left Ctrl: aim / left click lock / right click abort all",.43f);
+                    Label(-.354f,.045f,_model.Current.TargetAimHoldKey+": aim / left click lock / right click abort",.43f);
                     Button(-.24f,.105f,.225f,.04f,"SELECT TARGET",delegate { RunAction(delegate{host.Command(new NavCommand{Type="TARGET_SELECT"});}); },.51f);
                     Button(0,.105f,.225f,.04f,"INTERCEPT",delegate { RunAction(delegate{host.Command(new NavCommand{Type="INTERCEPT"});}); },.51f);
                     Button(.24f,.105f,.225f,.04f,"MATCH VELOCITY",delegate { RunAction(delegate{host.Command(new NavCommand{Type="MATCH_VELOCITY"});}); },.51f);
                     Button(-.24f,.155f,.225f,.04f,"CLEAR LOCK",delegate { RunAction(delegate{host.Command(new NavCommand{Type="TARGET_CLEAR"});}); },.51f);
+                    Button(.24f,.155f,.225f,.04f,"MOVE / RESIZE HUD",delegate { if(CommitEditors() && CloseScreen()) NavNativeUi.BeginLayout(host,true); },.51f);
                     var snap=host.Snapshot();Label(-.354f,.213f,Short(snap.TargetStatus??"Select target before flight.",85),.44f);
                 }
                 else
@@ -174,7 +176,7 @@ namespace ZeoNav
                     for(int i=0;i<RowsPerView && view*RowsPerView+i<rows.Length;i++) AddRow(rows[view*RowsPerView+i],-.163f+i*.059f);
                     Button(-.263f,.224f,.18f,.040f,"PREVIOUS",delegate { Navigate(-1); },.58f).Enabled=view>0;
                     Button(.263f,.224f,.18f,.040f,"NEXT",delegate { Navigate(1); },.58f).Enabled=view+1<views;
-                    if(_page==1) Button(0,.224f,.29f,.040f,"EDIT HUD POSITION",delegate { if(CommitEditors() && CloseScreen()) NavNativeUi.BeginLayout(host); },.55f);
+                    if(_page==1) Button(0,.224f,.29f,.040f,"MOVE / RESIZE HUD",delegate { if(CommitEditors() && CloseScreen()) NavNativeUi.BeginLayout(host); },.55f);
                 }
                 if(_page!=0)Label(-.354f,.281f,_page==2 ? "RGB / hex colors. Menu colors apply to the legacy window." : "Native settings are capturable. External HUD keeps streamer mode.",.46f);
                 _status=Label(-.354f,.309f,Short(_message,92),.46f);
@@ -201,7 +203,7 @@ namespace ZeoNav
                 var option=NavUiCatalog.Options.Single(o=>o.Key==prefix+suffixes[i]);
                 float y=.060f+i*.050f;Label(x,y,i==0?"MAX SIG (km)":"DISTANCE (km)",.46f);
                 string saved=option.Format(_model.Current);
-                var box=new MyGuiControlTextbox(new Vector2(x+.272f,y),saved,16,null,.59f);
+                var box=new ZeoUi.NativeRowTextbox(new Vector2(x+.272f,y),saved,16,null,.59f);
                 box.Size=new Vector2(.145f,.037f);box.SetToolTip(option.Label+Help(option));
                 Controls.Add(box);
                 Func<bool> commit=delegate {
@@ -225,22 +227,26 @@ namespace ZeoNav
             Button(-.24f,-.118f,.225f,.037f,"SCAN NEARBY",delegate{if(CommitEditors()){host.Command(new NavCommand{Type="DOCK_SCAN"});_rebuild=true;}},.51f);
             Button(0,-.118f,.225f,.037f,"AUTO DOCK / CANCEL",delegate{if(CommitEditors()){host.Command(new NavCommand{Type="DOCK_START"});if(host.Docking.Active)CloseScreen();}},.51f);
             Button(.24f,-.118f,.225f,.037f,"REFUEL / CANCEL",delegate{if(CommitEditors())host.Command(new NavCommand{Type="REFUEL"});},.51f);
-            for(int i=0;i<rows.Length;i++)AddRow(rows[i],-.060f+i*.052f);
-            _dockStatus=Label(-.354f,.157f,Short(host.Docking.Status,90),.44f);
-            _refuelStatus=Label(-.354f,.184f,Short(host.Refuel.Status,90),.44f);
-            Label(-.354f,.224f,"RCS only / single-grid ships / clear space / stationary ports. Keys: KEYS.",.43f);
+            for(int i=0;i<rows.Length;i++)AddRow(rows[i],-.064f+i*.048f);
+            _dockStatus=Label(-.354f,.206f,Short(host.Docking.Status,90),.44f);
+            _refuelStatus=Label(-.354f,.230f,Short(host.Refuel.Status,90),.44f);
+            Label(-.354f,.254f,"RCS only / single-grid ships / clear space / stationary ports. Keys: KEYS.",.43f);
         }
         private void BuildGps()
         {
             Label(-.354f,-.197f,"DESTINATION GPS",.42f);
-            _gpsSearch=new MyGuiControlTextbox(new Vector2(-.024f,-.166f),host.Selected?.Name??"Select GPS",128,null,.60f);
-            _gpsSearch.Size=new Vector2(.660f,.043f);
+            _gpsSearch=new ZeoUi.NativeRowTextbox(new Vector2(0,-.166f),host.Selected?.Name??"Select GPS",128,null,.60f);
+            _gpsSearch.Size=new Vector2(.708f,.043f);
             _gpsSearch.SetToolTip("Click and type the start of a GPS name: H, Home, Just. Up/Down and Enter or click a result. Clear text to show all.");
             Controls.Add(_gpsSearch);
-            _gpsArrow=Button(.331f,-.166f,.046f,.043f,"v",delegate {
+            _gpsArrow=Button(.330f,-.166f,.038f,.030f,"v",delegate {
                 if(_gpsList.Visible){CloseGpsChoices();FocusedControl=null;}
                 else {FocusedControl=_gpsSearch;OpenGpsChoices();}
-            },.6f);
+            },.45f);
+            _gpsArrow.OriginAlign=_gpsSearch.OriginAlign;
+            _gpsArrow.Position=_gpsSearch.Position+new Vector2(_gpsSearch.Size.X/2-.022f,0);
+            _gpsArrow.Size=new Vector2(.038f,_gpsSearch.Size.Y);
+            _gpsArrow.ColorMask=new Vector4(.30f,.35f,.38f,1);
             _gpsList=new MyGuiControlListbox(new Vector2(0,-.015f),MyGuiControlListboxStyleEnum.Default,false,.60f);
             _gpsList.MultiSelect=false;_gpsList.ItemSize=new Vector2(.682f,.032f);
             _gpsList.VisibleRowsCount=7;_gpsList.Size=new Vector2(.708f,.245f);
@@ -316,8 +322,11 @@ namespace ZeoNav
                     if(input.IsNewKeyPressed(MyKeys.Escape)){CancelKeyCapture();Message("Key change cancelled.");return;}
                     foreach(MyKeys key in Enum.GetValues(typeof(MyKeys)))
                     {
-                        if(!NavKeyBinding.CaptureKey(key)||!input.IsNewKeyPressed(key))continue;
-                        _keyDraft.Accept(NavKeyBinding.Capture(key,input.IsAnyCtrlKeyPressed(),input.IsAnyAltKeyPressed(),input.IsAnyShiftKeyPressed()));
+                        bool hold=_keyCaptureField=="TargetAimHoldKey";
+                        if(!(hold?NavKeyBinding.CaptureHoldKey(key):NavKeyBinding.CaptureKey(key))||!input.IsNewKeyPressed(key))continue;
+                        string name=key.ToString();
+                        bool modifier=name.Contains("Control")||name.Contains("Shift")||name.Contains("Alt");
+                        _keyDraft.Accept(hold&&modifier?name:NavKeyBinding.Capture(key,input.IsAnyCtrlKeyPressed(),input.IsAnyAltKeyPressed(),input.IsAnyShiftKeyPressed()));
                         NavNativeUi.GuardCapturedKey();_refreshKey();Message("Key selected. Click APPLY to save.");return;
                     }
                 }
@@ -379,6 +388,13 @@ namespace ZeoNav
         }
                 private void AddRow(NavOption option,float y)
         {
+            int start=Controls.Count;
+            AddRowContents(option,y);
+            string help=option.Label+"\n"+ZeoUi.SettingHelp.Explain(option.Key,option.Label)+Help(option)+"\nENTER / APPLY saves edits. Key capture requires APPLY.";
+            for(int i=start;i<Controls.Count;i++)Controls[i].SetToolTip(help);
+        }
+        private void AddRowContents(NavOption option,float y)
+        {
             var label=Label(-0.35364f,y-0.004f,Short(option.Label,38),0.62f);
             label.SetToolTip(option.Section+"\n"+option.Label+Help(option));
             Label(-0.35364f,y+0.015f,option.Section,0.40f);
@@ -387,19 +403,19 @@ namespace ZeoNav
             {
                 bool value=Convert.ToBoolean(option.Read(_model.Current));
                 MyGuiControlButton on=null,off=null;
-                var state=Label(0.07392f,y,value ? "ON" : "OFF",0.65f);
+                var state=Label(0.07392f,y,value ? "ON" : "OFF",0.65f); state.Visible=false;
                 Action<bool> choose=delegate(bool selected) {
                     if(!CommitEditors() || !Apply(option,selected)) return;
                     SetToggleState(on,off,state,selected);
                     if(option.Key=="StreamerMode" || option.Key=="CaptureSafeHud" || option.Key=="CaptureSafeMenu") _rebuild=true;
                 };
-                on=Button(0.19488f,y,0.07980f,0.041f,"ON",delegate { choose(true); });
-                off=Button(0.28812f,y,0.07980f,0.041f,"OFF",delegate { choose(false); });
+                on=Button(0.148f,y,0.144f,0.041f,"ON",delegate { choose(true); });
+                off=Button(0.304f,y,0.144f,0.041f,"OFF",delegate { choose(false); });
                 SetToggleState(on,off,state,value);
             }
-            else if(option.Kind==NavOptionKind.Choice) Choice(option,0.23100f,y,0.24696f);
+            else if(option.Kind==NavOptionKind.Choice) Choice(option,0.226f,y,0.300f);
             else if(option.Kind==NavOptionKind.Action)
-                Button(0.23100f,y,0.24696f,0.041f,option.Label,delegate {
+                Button(0.226f,y,0.300f,0.041f,option.Label,delegate {
                     if(CommitEditors() && Apply(option,null)) _rebuild=true;
                 },0.59f);
             else AddEditor(option,y);
@@ -408,13 +424,14 @@ namespace ZeoNav
         {
             if(_keyDraft!=null){_keyDraft.Cancel();NavNativeUi.GuardCapturedKey();_refreshKey?.Invoke();}
             _keyDraft=null;_refreshKey=null;
+            _keyCaptureField=null;
         }
         private void AddKeyRow(NavOption option,float y)
         {
             var draft=new NavKeyDraft(option.Format(_model.Current));MyGuiControlButton listen=null;
             Action refresh=()=>{listen.Text=draft.Listening?"PRESS KEY":draft.Value;listen.SetToolTip(draft.Listening?"Press a key, with optional Ctrl / Alt / Shift. Escape cancels.":draft.Value+"\nClick, press a key, then APPLY. CLEAR also needs APPLY.");};
             listen=Button(.163f,y,.174f,.041f,draft.Value,delegate {
-                CancelKeyCapture();draft.Begin();_keyDraft=draft;_refreshKey=refresh;refresh();Message("Press a key or chord. Escape cancels.");
+                CancelKeyCapture();draft.Begin();_keyDraft=draft;_keyCaptureField=option.Key;_refreshKey=refresh;refresh();Message("Press a key or chord. Escape cancels.");
             },.48f);
             Button(.282f,y,.058f,.041f,"CLEAR",delegate{CancelKeyCapture();draft.Accept("None");_keyDraft=draft;_refreshKey=refresh;refresh();Message("Unbound draft. Click APPLY to save.");},.45f);
             Button(.346f,y,.060f,.041f,"APPLY",delegate{
@@ -437,6 +454,11 @@ namespace ZeoNav
             if(option.Key.StartsWith("Departure",StringComparison.Ordinal)) return "\nOptional departure zone, measured from where this route starts. Use the lower of departure/cruise SIG until outside the selected distance. Overlapping approach zones use the lower limit. Undock manually before starting a route.";
             if(option.Key=="ApproachSigEnabled"||option.Key=="ApproachSigKm"||option.Key=="ApproachDistanceKm") return "\nOptional for the selected trip. Uses the lower of cruise/approach SIG. Activates at this distance from the GPS or the final turn-and-burn, whichever comes first. Braking is planned at this lower ceiling from departure.";
             if(option.Key=="SpeedCapOverride") return "\n0 = ShipCore cap, or this server's 50,000 m/s limit if unavailable. Explicit range: 0-50000 m/s.";
+            if(option.Key=="FlipAxisMode") return "\nAUTO uses the hull shape until both pitch and yaw have completed a flip on this ship, then prefers the faster measured axis. PITCH and YAW force the next 180-degree flip.";
+            if(option.Key=="FlipTurnMode") return "\nAUTO uses the measured standard gyro response, with verified RCS assistance when needed. GYRO uses standard gyros. RCS requests RCS computers; own-SIG headroom and the stall fallback always remain active. Applies on the next route.";
+            if(option.Key=="TargetAimHoldKey") return "\nHold this key to select a Spectrum signal. Left click locks; right click aborts. Standalone Ctrl, Alt and Shift keys can be captured.";
+            if(option.Key=="DampenerEntryMaxMps") return "\nLegacy saved threshold. Adaptive flight now uses controlled braking and reserves dampeners for the final stop; changing this does not enable early coasting.";
+            if(option.Key=="TerminalDampeners") return "\nNative dampeners assist only the final stop when full-bank MAX SIG is safe. Terminal positioning still uses controlled thrust.";
             if(option.Kind==NavOptionKind.Number) return "\nRange: "+option.Min+" to "+option.Max+". Step: "+option.Step;
             if(option.Key=="PredictTrackMotion") return "\nPredicts motion between sensor updates. Does not enable overlay marker smoothing.";
             if(option.Key=="CaptureSafeMenu") return "\nApplies to FULL / LEGACY SETTINGS only. Native game screens remain capturable.";
@@ -446,9 +468,9 @@ namespace ZeoNav
         {
             bool color=option.Kind==NavOptionKind.Color;
             string saved=option.Format(_model.Current);
-            var edit=new MyGuiControlTextbox(new Vector2(color ? 0.16632f : 0.17640f,y),saved,32,null,0.64f);
+            var edit=new ZeoUi.NativeRowTextbox(new Vector2(color ? 0.163f : 0.182f,y),saved,32,null,0.64f);
             edit.OriginAlign=MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER;
-            edit.Size=new Vector2(color ? 0.13020f : 0.11760f,0.040f);
+            edit.Size=new Vector2(color ? 0.174f : 0.130f,0.040f);
             edit.SetToolTip(option.Label+Help(option)+"\nENTER or APPLY saves. Page changes save valid edits. Closing discards invalid edits.");
             Controls.Add(edit);
             Func<bool> commit=delegate {
@@ -465,10 +487,10 @@ namespace ZeoNav
             _editors.Add(commit);
             edit.EnterPressed+=delegate { if(CommitEditors()) _rebuild=true; };
             edit.TextChanged+=delegate { if(!_building && edit.Text!=saved) Message("Editing "+option.Label+". ENTER or APPLY saves."); };
-            Button(0.32508f,y,0.06216f,0.041f,"APPLY",delegate { if(CommitEditors()) _rebuild=true; },0.49f);
+            Button(0.346f,y,0.060f,0.041f,"APPLY",delegate { if(CommitEditors()) _rebuild=true; },0.49f);
             if(color)
             {
-                var pick=Button(0.26292f,y,0.05628f,0.041f,"PICK",delegate {
+                var pick=Button(0.282f,y,0.058f,0.041f,"PICK",delegate {
                     if(!CommitEditors()) return;
                     _colorScreen=new NavNativeColorScreen(option.Label,option.Format(_model.Current),delegate(string hex) {
                         if(!Apply(option,hex)) return false;
@@ -488,8 +510,8 @@ namespace ZeoNav
                         commit();
                     } catch(Exception ex) { Message(option.Label+": "+ex.Message); }
                 };
-                Button(0.09492f,y,0.03528f,0.041f,"-",delegate { step(-1); });
-                Button(0.26124f,y,0.03528f,0.041f,"+",delegate { step(1); });
+                Button(0.0935f,y,0.035f,0.041f,"-",delegate { step(-1); });
+                Button(0.282f,y,0.058f,0.041f,"+",delegate { step(1); });
             }
         }
         private void Choice(NavOption option,float x,float y,float width)
@@ -529,7 +551,7 @@ namespace ZeoNav
         }
         private MyGuiControlButton Button(float x,float y,float width,float height,string text,Action action,float scale=0.65f)
         {
-            var button=new MyGuiControlButton(new Vector2(x,y),MyGuiControlButtonStyleEnum.Rectangular,new Vector2(width,height),null,
+            var button=new MyGuiControlButton(new Vector2(x,y),MyGuiControlButtonStyleEnum.Rectangular,new Vector2(width,Math.Max(height,ZeoUi.NativeRowTextbox.RowHeight)),null,
                 MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,null,new StringBuilder(text),scale,
                 MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,MyGuiControlHighlightType.WHEN_CURSOR_OVER,
                 delegate(MyGuiControlButton _) { action(); });
@@ -560,7 +582,7 @@ namespace ZeoNav
                     originAlign:MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER);
                 _rgb[i].Value=values[i]; Controls.Add(_rgb[i]);
             }
-            _hex=new MyGuiControlTextbox(new Vector2(-0.12f,0.083f),value,7,null,0.70f);
+            _hex=new ZeoUi.NativeRowTextbox(new Vector2(-0.12f,0.083f),value,7,null,0.70f);
             _hex.OriginAlign=MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER;
             _hex.Size=new Vector2(0.18f,0.04f); Controls.Add(_hex);
             _swatch=ActionButton(0.11f,0.083f,0.20f,"PREVIEW",delegate { SyncFromHex(); });

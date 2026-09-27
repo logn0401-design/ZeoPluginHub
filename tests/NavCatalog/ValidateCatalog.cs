@@ -21,7 +21,7 @@ internal static class ValidateCatalog
         Directory.CreateDirectory(scratch);
         AppDomain.CurrentDomain.AssemblyResolve += (s, e) => {
             string name = new AssemblyName(e.Name).Name;
-            if (name == "ZeoNav.Runtime") return Assembly.LoadFrom(runtime);
+            if (name == "ZeoNav") return Assembly.LoadFrom(runtime);
             foreach (string directory in new[] { args[1], args[2] }) {
                 string file = Path.Combine(directory, name + ".dll");
                 if (File.Exists(file)) return Assembly.LoadFrom(file);
@@ -46,7 +46,7 @@ internal static class ValidateCatalog
         using (var archive = ZipFile.OpenRead(zip)) Require(archive.Entries.Select(e => e.FullName).OrderBy(n => n).SequenceEqual(new[] { "ZeoNavOverlay.exe", "ZeoNavOverlay.exe.config" }), "Overlay archive contains exactly the matching executable and config");
         ZipFile.ExtractToDirectory(zip, overlay);
         var loader = Assembly.LoadFrom(args[3]);
-        var entryType = loader.GetType("Zeo.PulsarCatalog.Nav.EntryPoint", true);
+        var entryType = loader.GetType("Zeo.PulsarCatalog.EntryPoint", true);
         var entry = Activator.CreateInstance(entryType);
         var binding = entryType.GetMethod("LoadAssets");
         bool rejected = false;
@@ -54,9 +54,9 @@ internal static class ValidateCatalog
         catch (TargetInvocationException ex) { rejected = ex.InnerException is InvalidOperationException; }
         Require(rejected, "Actual compiled loader rejects a missing overlay package");
         binding.Invoke(entry, new object[] { new Dictionary<string, string> { { "ZeoNavOverlayPackage", overlay } } });
-        var nav = entryType.GetField("nav", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(entry);
+        var nav = entryType.GetField("plugin", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(entry);
         var navType = nav.GetType();
-        Require(navType.Assembly.GetName().Name == "ZeoNav.Runtime", "Loader binds the catalog runtime assembly");
+        Require(navType.Assembly.GetName().Name == "ZeoNav", "Loader binds the catalog runtime assembly");
         Require((string)navType.GetField("catalogOverlayPath", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav) == Path.Combine(overlay, "ZeoNavOverlay.exe"), "Actual runtime binds the extracted overlay");
         Require((string)navType.GetField("dataDir", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav) == Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Pulsar", "ZeoNav"), "Persistent settings path preserved");
         Require(navType.GetField("rx", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav) == null, "Offline validation does not initialize network or flight");

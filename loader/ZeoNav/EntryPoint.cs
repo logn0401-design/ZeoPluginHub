@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Reflection;
 using VRage.Plugins;
-[assembly: AssemblyVersion("1.1.15.0")]
-[assembly: AssemblyFileVersion("1.1.15.0")]
+[assembly: AssemblyVersion("1.1.22.0")]
+[assembly: AssemblyFileVersion("1.1.22.0")]
 namespace Zeo.PulsarCatalog {
     public sealed class EntryPoint : IPlugin {
         private readonly ZeoNav.Plugin plugin = new ZeoNav.Plugin();

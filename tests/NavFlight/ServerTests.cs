@@ -122,6 +122,15 @@ internal static partial class Tests
         ship.BeginThrustFrame(); ship.ClearThrust(); ship.SetMove(MoveDir.Forward,1); ship.CommitThrustFrame();
         Check("Staged command still obeys stale signature cutoff",ship.ForwardCommandRatio==0 && canterbury.Override==0);
         ship.EndThrustControl(false);
+        canterbury.Writes.Clear();unknown.Writes.Clear();rcs.Writes.Clear();
+        ship.BeginThrustControl();ship.RcsOnly=true;
+        Check("RCS-only force excludes Canterbury and unknown main drives",ship.Force(MoveDir.Forward)==1500000);
+        ship.BeginThrustFrame();ship.SetMove(MoveDir.Forward,.6);ship.CommitThrustFrame();
+        Check("RCS docking commands reach RCS only",Math.Abs(rcs.Override-.6)<1e-6&&canterbury.Override==0&&unknown.Override==0);
+        Check("RCS-only thrust acknowledges the commanded RCS bank",Math.Abs(ship.ForwardReadbackRatio-.6)<1e-6);
+        Check("No positive main drive command is published in docking",!canterbury.Writes.Exists(v=>v>0)&&!unknown.Writes.Exists(v=>v>0));
+        ship.EndThrustControl(false);
+        Check("Leaving docking restores normal force model and clears RCS",!ship.RcsOnly&&rcs.Override==0&&ship.Force(MoveDir.Forward)==551500000);
     }
 }
 
@@ -155,7 +164,10 @@ internal sealed class FixtureProxy : RealProxy
 {
     private readonly Func<IMethodCallMessage,object> invoke;
     private FixtureProxy(Type type,Func<IMethodCallMessage,object> invoke):base(type) {this.invoke=invoke;}
+    public static object Make(Type type,Func<IMethodCallMessage,object> invoke) {return new FixtureProxy(type,invoke).GetTransparentProxy();}
     public static T Make<T>(Func<IMethodCallMessage,object> invoke) {return (T)new FixtureProxy(typeof(T),invoke).GetTransparentProxy();}
     public static object Default(IMethodCallMessage call) {var t=((MethodInfo)call.MethodBase).ReturnType;return t==typeof(void)||!t.IsValueType ? null : Activator.CreateInstance(t);}
-    public override IMessage Invoke(IMessage message) {var call=(IMethodCallMessage)message;try {return new ReturnMessage(invoke(call),null,0,call.LogicalCallContext,call);}catch(Exception ex){return new ReturnMessage(ex,call);}}
+    public override IMessage Invoke(IMessage message) {var call=(IMethodCallMessage)message;try {var result=invoke(call);var output=result as FixtureOut;return new ReturnMessage(output==null?result:output.Value,output==null?call.Args:output.Args,output==null?call.ArgCount:output.Args.Length,call.LogicalCallContext,call);}catch(Exception ex){return new ReturnMessage(ex,call);}}
 }
+
+internal sealed class FixtureOut { public object Value; public object[] Args; }

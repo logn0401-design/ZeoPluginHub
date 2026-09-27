@@ -103,6 +103,11 @@ namespace ZeoNav
             string[] sizeLabels={"Destination","Distance","Speed","Spectrum / signature","ETA","Flight state","Flip countdown","Stop distance","Route progress","Warning text"};
             for(int i=0;i<sizes.Length;i++) number("TRIP HUD","DATA SIZES",sizes[i]+"Scale",sizeLabels[i]+" scale",.5,3,.05,2);
             action("TRIP HUD","RESET","@RESET_TRIP","RESET TRIP HUD");
+            number("TRIP HUD","TARGET LOCK","TargetHudX","Target lock horizontal position",-.98,.98,.02,2);
+            number("TRIP HUD","TARGET LOCK","TargetHudY","Target lock vertical position",-.98,.98,.02,2);
+            number("TRIP HUD","TARGET LOCK","TargetHudWidth","Target lock width",.5,3,.05,2);
+            number("TRIP HUD","TARGET LOCK","TargetHudHeight","Target lock height",.5,3,.05,2);
+            number("TRIP HUD","TARGET LOCK","TargetHudTextScale","Target lock text size",.5,3,.05,2);
             choice("STYLE","FRAME","Frame","HUD frame",Frames);
             choice("STYLE","FRAME","FontStyle","HUD font",Fonts);
             choice("STYLE","PALETTE","Theme","Theme preset",Themes);
@@ -114,14 +119,15 @@ namespace ZeoNav
             number("STYLE","FRAME","CornerCut","Corner cut",.25,2.5,.05,2);
             number("STYLE","FRAME","HeaderHeight","Header height",.5,2,.05,2);
             number("STYLE","FRAME","PatternIntensity","Pattern intensity",0,2,.05,2);
-            string[] keys={"MenuKey","StartKey","AbortKey","ManualFlipKey","SignalUpKey","SignalDownKey","QuickDockKey","RefuelKey","TargetSelectKey","TargetCycleKey","InterceptKey","MatchVelocityKey"};
-            string[] keyLabels={"Open / close Nav","Start selected route","Abort / release","Manual 180 flip","MAX SIG +5 km","MAX SIG -5 km","Quick Dock / cancel","Refuel / cancel","Select target (mouse)","Cycle reticle contacts","Intercept / cancel","Match velocity / cancel"};
+            string[] keys={"MenuKey","StartKey","AbortKey","ManualFlipKey","SignalUpKey","SignalDownKey","QuickDockKey","RefuelKey","TargetAimHoldKey","TargetSelectKey","TargetCycleKey","InterceptKey","MatchVelocityKey"};
+            string[] keyLabels={"Open / close Nav","Start selected route","Abort / release","Manual 180 flip","MAX SIG +5 km","MAX SIG -5 km","Quick Dock / cancel","Refuel / cancel","Hold to aim at target","Toggle target picker","Cycle reticle contacts","Intercept / cancel","Match velocity / cancel"};
             string[] values=new[] {"None"}.Concat(Enum.GetNames(typeof(MyKeys)).Where(x=>x!="None").OrderBy(x=>x)).ToArray();
             for(int i=0;i<keys.Length;i++) choice("KEYS","KEYBOARD",keys[i],keyLabels[i],values);
-            boolean("ADVANCED","FLIGHT","RcsTurnAssist","RCS turn assist (experimental)");
             number("ADVANCED","FLIGHT","FlipTimeSeconds","Minimum flip allowance (s)",1,1800,.5,1);
+            choice("ADVANCED","FLIGHT","FlipAxisMode","180-degree turn axis",new[]{"AUTO","PITCH","YAW"});
+            choice("ADVANCED","FLIGHT","FlipTurnMode","Flip turn bank",new[]{"AUTO","GYRO","RCS"});
+            number("ADVANCED","FLIGHT","RcsFlipAdvantagePct","RCS torque advantage (%)",0,100,5,0);
             number("TARGET","RENDEZVOUS","InterceptStandOffKm","Intercept stand-off (km)",2,50,1,0);
-            boolean("TARGET","SELECTION","TargetCtrlAim","Hold Left Ctrl to aim and lock");
             boolean("TARGET","VELOCITY","MatchKeep","Keep velocity matched");
             boolean("TARGET","ENGINES","MatchRcsOnly","RCS only for target flight");
             number("DOCKING","APPROACH","DockScanMeters","Search radius (m)",50,1000,50,0);
@@ -132,6 +138,11 @@ namespace ZeoNav
             number("ADVANCED","FLIGHT","BrakeSafety","Brake safety multiplier",1,2,.01,2);
             number("ADVANCED","ARRIVAL","ArrivalRadiusMeters","Arrival radius (m)",1,100,1,0);
             number("ADVANCED","ARRIVAL","ArrivalSpeedMps","Arrival speed (m/s)",.05,5,.05,2);
+            number("ADVANCED","ARRIVAL","TerminalEnvelopeMeters","Terminal envelope (m)",1000,5000,100,0);
+            number("ADVANCED","ARRIVAL","TerminalCruiseMps","Terminal speed limit (m/s)",1,30,1,0);
+            number("ADVANCED","ARRIVAL","TerminalHandoffMaxMps","RCS handoff limit (m/s)",5,100,5,0);
+            number("ADVANCED","ARRIVAL","DampenerEntryMaxMps","Early dampener limit (m/s)",0,100,5,0);
+            boolean("ADVANCED","ARRIVAL","TerminalDampeners","Use dampeners for final stop");
             number("ADVANCED","SPEED","SpeedCapOverride","Speed cap (m/s, 0 = AUTO)",0,50000,25,0);
             boolean("ADVANCED","INPUT","AbortOnManualInput","Abort on manual pilot input");
             return rows;
@@ -155,7 +166,7 @@ namespace ZeoNav
         public static Dictionary<string,object> ResetTrip()
         {
             var defaults=new NavConfig();
-            string[] keys={"TripPanelVisibility","TripUseHudTheme","HudX","HudY","HudWidth","HudHeight","GlobalScale","PanelScale","BackingOpacity","InnerPadding","BorderWidth","DestinationScale","DistanceScale","SpeedScale","SignalScale","EtaScale","PhaseScale","FlipScale","StopScale","ProgressScale","WarningScale"};
+            string[] keys={"TripPanelVisibility","TripUseHudTheme","HudX","HudY","TargetHudX","TargetHudY","TargetHudWidth","TargetHudHeight","TargetHudTextScale","HudWidth","HudHeight","GlobalScale","PanelScale","BackingOpacity","InnerPadding","BorderWidth","DestinationScale","DistanceScale","SpeedScale","SignalScale","EtaScale","PhaseScale","FlipScale","StopScale","ProgressScale","WarningScale"};
             return keys.ToDictionary(k=>k,k=>typeof(NavConfig).GetField(k).GetValue(defaults));
         }
     }

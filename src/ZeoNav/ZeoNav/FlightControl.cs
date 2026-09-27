@@ -11,7 +11,23 @@ namespace ZeoNav
 {
     internal enum MoveDir { Forward = 0, Backward = 1, Right = 2, Left = 3, Up = 4, Down = 5 }
 
-    internal sealed class ShipContext
+    internal static class FlipAxisChoice
+    {
+        // Keep yaw for near-square hulls; a meaningful height advantage is
+        // required before choosing pitch to avoid axis hopping on scans.
+        internal static bool ShouldPitch(double width,double height)
+        { return width>0&&height>0&&height<width*.85; }
+        internal static bool SelectPitch(double width,double height,string mode,double pitchSeconds,double yawSeconds)
+        {
+            if(mode=="PITCH")return true;
+            if(mode=="YAW")return false;
+            if(pitchSeconds>0&&yawSeconds>0&&Math.Abs(pitchSeconds-yawSeconds)>Math.Min(pitchSeconds,yawSeconds)*.05)
+                return pitchSeconds<yawSeconds;
+            return ShouldPitch(width,height);
+        }
+    }
+
+    internal sealed partial class ShipContext
     {
         public readonly Sandbox.ModAPI.IMyShipController Controller;
         public readonly IMyCubeGrid Grid;
@@ -28,20 +44,139 @@ namespace ZeoNav
         private readonly double[] force = new double[6];
         private readonly NavOsJitAim aim;
         private readonly PrecisionAim precisionAim = new PrecisionAim();
-        internal bool AllowRcsTurnAssist;
         private bool wasPrecision, bankTurn;
+        private bool rcsTurnActive, rcsTurnRejected, rcsTurnEvaluated;
+        private DateTime rcsTurnStartedUtc, rcsLastProgressUtc;
+        private double rcsLastAngle, rcsRatedTorque;
+        internal bool AllowRcsFlip;
+        internal string FlipAxisMode="AUTO",FlipTurnMode="AUTO";
+        internal double RcsFlipAdvantagePct=30;
+        internal void ResetFlipTurn() { rcsTurnRejected = rcsTurnEvaluated = false; rcsLastAngle = 0; }
+        internal static bool PreferRcsTorque(double standard, double rcs)
+        { return PreferRcsTorque(standard,rcs,30); }
+        internal static bool PreferRcsTorque(double standard, double rcs,double advantagePct)
+        { return SignalBudget.Finite(standard) && standard > 0 && SignalBudget.Finite(rcs) && rcs > 0 &&
+            SignalBudget.Finite(advantagePct) && rcs >= standard * (1+Math.Max(0,Math.Min(100,advantagePct))/100); }
+        private static bool IsRcsComputer(Sandbox.ModAPI.IMyGyro g)
+        { try{return g!=null&&g.BlockDefinition.SubtypeName=="sdg_rcsGyroComputer";}catch{return false;} }
+        private static double RatedGyroTorque(Sandbox.ModAPI.IMyGyro g)
+        {
+            try
+            {
+                var definition=Sandbox.Definitions.MyDefinitionManager.Static.GetCubeBlockDefinition(g.BlockDefinition);
+                if(definition==null)return 0;
+                var type=definition.GetType();
+                var field=type.GetField("ForceMagnitude");
+                var property=type.GetProperty("ForceMagnitude");
+                object raw=field!=null?field.GetValue(definition):property!=null?property.GetValue(definition,null):null;
+                double force=raw==null?0:Convert.ToDouble(raw);
+                double multiplier=g.GyroStrengthMultiplier;
+                double power=g.GyroPower;
+                double torque=force*multiplier*power;
+                return SignalBudget.Finite(torque)&&torque>0?torque:0;
+            }
+            catch{return 0;}
+        }
+        private bool RcsTurnAllowed()
+        {
+            var budget=SignatureBudget;
+            return AllowRcsFlip && !(FlipTurnMode=="AUTO"&&AdaptiveTurnReady) && FlipTurnMode!="GYRO" && !rcsTurnRejected && budget!=null && budget.Ready &&
+                budget.PredictedSquared(new double[]{1,1,1,1,1,1}) <=
+                Math.Pow(budget.TargetKm*SignalBudget.RangeMargin*.85,2);
+        }
+        private void SelectTurnBank(double angle)
+        {
+            bool allowed=angle>30 && RcsTurnAllowed();
+            if(!rcsTurnActive && !rcsTurnEvaluated && allowed)
+            {
+                rcsTurnEvaluated=true;
+                double standard=Gyros.Where(g=>g!=null&&!g.Closed&&g.IsFunctional).Sum(RatedGyroTorque);
+                bool available=rcsGyros.Any(g=>g!=null&&!g.Closed&&g.IsFunctional&&g.CubeGrid==Controller.CubeGrid&&IsRcsComputer(g));
+                bool selected=available&&rcsRatedTorque>0 &&
+                    (FlipTurnMode=="RCS"||PreferRcsTorque(standard,rcsRatedTorque,RcsFlipAdvantagePct));
+                if(selected)
+                {
+                    passiveTurn.Reset();
+                    rcsTurnActive=true;rcsTurnStartedUtc=rcsLastProgressUtc=DateTime.UtcNow;rcsLastAngle=angle;
+                    log("FLIP BANK RCS // standard="+standard.ToString("0")+"Nm rcs="+rcsRatedTorque.ToString("0")+"Nm");
+                }
+                else log("FLIP BANK STANDARD // mode="+FlipTurnMode+" standard="+standard.ToString("0")+"Nm rcs="+rcsRatedTorque.ToString("0")+"Nm / RCS unavailable or advantage unproven");
+            }
+            if(rcsTurnActive)
+            {
+                var now=DateTime.UtcNow;
+                if(angle < rcsLastAngle-1){rcsLastAngle=angle;rcsLastProgressUtc=now;}
+                bool stalled=(now-rcsTurnStartedUtc).TotalSeconds>2 &&
+                    ((now-rcsLastProgressUtc).TotalSeconds>2 || LastAngularRateDeg<.4);
+                if(!allowed || stalled)
+                {
+                    if(stalled){rcsTurnRejected=true;log("FLIP BANK RCS STALLED // rate="+LastAngularRateDeg.ToString("0.00")+"deg/s angle="+angle.ToString("0.0")+"deg // standard gyro fallback");}
+                    passiveTurn.Reset();
+                    rcsTurnActive=false;
+                }
+            }
+        }
+        private double turnRequestDegPerSec;
+        internal double TurnRequestDegPerSec { get { return turnRequestDegPerSec; } }
+        internal int CommandedTurnGyros { get { return (rcsTurnActive?rcsGyros:Gyros).Count(g=>g!=null&&!g.Closed&&g.IsFunctional&&g.Enabled&&g.GyroOverride); } }
+        internal double TurnReadbackDegPerSec
+        {
+            get {
+                double maximum=0;
+                foreach(var g in rcsTurnActive?rcsGyros:Gyros)
+                    try { if(g!=null&&!g.Closed&&g.GyroOverride)
+                        maximum=Math.Max(maximum,Math.Sqrt(g.Pitch*g.Pitch+g.Yaw*g.Yaw+g.Roll*g.Roll)*180/Math.PI); }
+                    catch { }
+                return maximum;
+            }
+        }
         internal double TurnAllowanceSeconds=180;
         private double observedTurnRate;
+        private string flipAxisMode="UNMEASURED";
+        private bool lastHalfTurnWasPitch,halfTurnAxisChosen;
+        private double pitchFlipSeconds,yawFlipSeconds;
+        internal void RecordFlipTime(double seconds)
+        {
+            if(!halfTurnAxisChosen||seconds<=0||seconds>1800)return;
+            if(AdaptiveTurnReady)measuredAdaptiveFlip=Math.Max(measuredAdaptiveFlip,seconds);
+            if(lastHalfTurnWasPitch)pitchFlipSeconds=pitchFlipSeconds<=0?seconds:pitchFlipSeconds*.7+seconds*.3;
+            else yawFlipSeconds=yawFlipSeconds<=0?seconds:yawFlipSeconds*.7+seconds*.3;
+            log("FLIP AXIS LEARNED // pitch="+pitchFlipSeconds.ToString("0.00")+"s yaw="+yawFlipSeconds.ToString("0.00")+"s mode="+FlipAxisMode);
+            halfTurnAxisChosen=false;
+        }
+        private Vector3D ChooseHalfTurnAxis(bool record=true)
+        {
+            // A 180-degree forward flip can pitch or yaw. Estimate the shorter
+            // transverse radius from the occupied main-grid bounds; the smaller
+            // radius normally has less rotational inertia for a long hull.
+            try
+            {
+                var cells=Grid.Max-Grid.Min+Vector3I.One;
+                var size=new Vector3D(cells.X,cells.Y,cells.Z)*Grid.GridSize;
+                var m=Grid.WorldMatrix;
+                Func<Vector3D,double> extent=a=>Math.Abs(Vector3D.Dot(a,m.Right))*size.X+
+                    Math.Abs(Vector3D.Dot(a,m.Up))*size.Y+Math.Abs(Vector3D.Dot(a,m.Backward))*size.Z;
+                double width=extent(Controller.WorldMatrix.Right),height=extent(Controller.WorldMatrix.Up);
+                bool pitch=FlipAxisChoice.SelectPitch(width,height,FlipAxisMode,pitchFlipSeconds,yawFlipSeconds);
+                if(record){lastHalfTurnWasPitch=pitch;halfTurnAxisChosen=true;
+                flipAxisMode=(pitch?"PITCH":"YAW")+" mode="+FlipAxisMode+" hullW="+width.ToString("0.0")+"m hullH="+height.ToString("0.0")+"m";}
+                return pitch?Controller.WorldMatrix.Right:Controller.WorldMatrix.Up;
+            }
+            catch { flipAxisMode="YAW / GEOMETRY UNKNOWN"; return Controller.WorldMatrix.Up; }
+        }
         private void ReleaseTurnBank(Sandbox.ModAPI.IMyGyro keep)
-        {if(!bankTurn)return;foreach(var g in Gyros)if(g!=keep&&!g.Closed){g.Pitch=g.Yaw=g.Roll=0;g.GyroOverride=false;}foreach(var g in rcsGyros)if(!g.Closed){g.Pitch=g.Yaw=g.Roll=0;g.GyroOverride=false;SetGyroEnabledRemember(g,false);}
-            bankTurn=false;}
+        {if(!bankTurn&&!rcsTurnActive)return;passiveTurn.Reset();rcsTurnActive=false;foreach(var g in Gyros)if(g!=keep&&!g.Closed){g.Pitch=g.Yaw=g.Roll=0;g.GyroOverride=false;bool prior;if(savedGyroEnabled.TryGetValue(g.EntityId,out prior))SetGyroEnabledRemember(g,prior);}foreach(var g in rcsGyros)if(!g.Closed){g.Pitch=g.Yaw=g.Roll=0;g.GyroOverride=false;SetGyroEnabledRemember(g,false);}
+            bankTurn=false;turnRequestDegPerSec=0;}
         private void CommandTurnBank(Vector3D worldRate)
         {
             bankTurn=true;
-            foreach(var g in Gyros.Concat(AllowRcsTurnAssist?rcsGyros.Where(r=>r.BlockDefinition.SubtypeName=="sdg_rcsGyroComputer"):Enumerable.Empty<Sandbox.ModAPI.IMyGyro>()))
+            turnRequestDegPerSec=worldRate.Length()*180/Math.PI;
+            // One bank owns attitude at a time. The mod scales RCS computer torque
+            // from actual RCS thrust geometry; never drive both banks together.
+            foreach(var g in rcsTurnActive?rcsGyros.Where(r=>r.CubeGrid==Controller.CubeGrid&&IsRcsComputer(r)):Gyros)
             {
                 if(g.Closed||!g.IsFunctional)continue;
-                if(rcsGyros.Any(r=>object.ReferenceEquals(r,g)))SetGyroEnabledRemember(g,true);
+                if(rcsTurnActive)SetGyroEnabledRemember(g,true);
                 if(!g.Enabled)continue;
                 controlledGyroRefs[g.EntityId]=g;RememberGyroCommandState(g);
                 var command=PrecisionAim.GyroCommand(worldRate,g.WorldMatrix);
@@ -175,10 +310,15 @@ namespace ZeoNav
                     " fRb=" + (ForwardReadbackRatio * 100.0).ToString("0.0") + "%" +
                     " gyro=" + TotalGyroCount +
                     " navGyro=" + Gyros.Count(g=>!g.Closed&&g.GyroOverride) + "/" + Gyros.Count +
+                    " stdEnabled=" + Gyros.Count(g=>!g.Closed&&g.IsFunctional&&g.Enabled) +
+                    " rcsEnabled=" + rcsGyros.Count(g=>!g.Closed&&g.Enabled) +
+                    " turnCmd=" + turnRequestDegPerSec.ToString("0.00") + "deg/s" +
+                    " flipAxis=" + flipAxisMode +
                     " gyroMode=" + AimMode +
                     " otherOverrides=" + Gyros.Count(g => g != activeGyro && !g.Closed && g.GyroOverride) +
                     " subGyro=" + SubgridGyroCount +
                     " rcsGyro=" + RcsGyroCount +
+                    " rcsTorque=" + (rcsRatedTorque/1000000.0).ToString("0.0") + "MNm" +
                     " gyroPwr=" + NavGyroPowerPercent.ToString("0") + "%" +
                     " F=" + Mn(Force(MoveDir.Forward)) +
                     " B=" + Mn(Force(MoveDir.Backward)) +
@@ -200,6 +340,7 @@ namespace ZeoNav
         }
         public void Scan()
         {
+            if(!gyroControlActive)rcsRatedTorque=0;
             var previousGyro = activeGyro;
             foreach (var x in thrusters.Values) x.Clear();
             Gyros.Clear();
@@ -283,6 +424,11 @@ namespace ZeoNav
                             // Isolate RCS Control Computers anywhere on the construct.
                             rcsGyros.Add(g);
                             RcsGyroCount++;
+                            // Capture the mod's live torque multiplier before isolation.
+                            // Once every computer is disabled its internal division by
+                            // working-computer count can produce an invalid multiplier.
+                            if(!gyroControlActive && g.Enabled && g.CubeGrid==Controller.CubeGrid && IsRcsComputer(g))
+                                rcsRatedTorque+=RatedGyroTorque(g);
                         }
                         else if (g.CubeGrid == Controller.CubeGrid)
                         {
@@ -696,6 +842,7 @@ namespace ZeoNav
                 controlledGyroRefs.Clear();
                 aim.Reset();
                 gyroControlActive = true;
+                rcsTurnActive=false;rcsTurnRejected=rcsTurnEvaluated=false;
             }
             ApplyGyroControlState();
         }
@@ -741,19 +888,31 @@ namespace ZeoNav
 
             // Exact working NavOS authority model: ONE standard gyro is commanded. Do not
             // alter GyroPower and do not place every standard gyro into override mode.
-            EnsureActiveGyro();
+            if(!rcsTurnActive)EnsureActiveGyro();
 
-            // SDX RCS Control Computers are a second attitude-control system and can
-            // fight the proven NavOS gyro solution. They are never used as a fallback.
-            // Neutralize/disable them while Zeo Nav owns attitude, then restore exactly.
+            // Neutralize the inactive bank on every tick; another game system may
+            // re-enable a computer between our updates.
+            if(rcsTurnActive)foreach(var g in Gyros)
+            {
+                if(g==null||g.Closed||!g.IsFunctional)continue;
+                controlledGyroRefs[g.EntityId]=g;RememberGyroCommandState(g);
+                try{g.Pitch=g.Yaw=g.Roll=0;g.GyroOverride=false;}catch{}
+                SetGyroEnabledRemember(g,false);
+            }
+            else foreach(var g in Gyros)
+            {
+                if(g==null||g.Closed)continue;
+                bool prior;if(savedGyroEnabled.TryGetValue(g.EntityId,out prior))SetGyroEnabledRemember(g,prior);
+            }
             for (int i = 0; i < rcsGyros.Count; i++)
             {
                 Sandbox.ModAPI.IMyGyro g = rcsGyros[i];
                 if (g == null || g.Closed || !g.IsFunctional) continue;
-                if(AllowRcsTurnAssist&&bankTurn&&g.BlockDefinition.SubtypeName=="sdg_rcsGyroComputer")continue;
                 controlledGyroRefs[g.EntityId] = g;
                 RememberGyroCommandState(g);
-                SetGyroEnabledRemember(g, false);
+                bool bankMember=rcsTurnActive&&g.CubeGrid==Controller.CubeGrid&&IsRcsComputer(g);
+                SetGyroEnabledRemember(g,bankMember);
+                if(bankMember)continue;
                 try
                 {
                     if (g.Pitch != 0) g.Pitch = 0;
@@ -767,7 +926,7 @@ namespace ZeoNav
 
         public void ReleaseGyros()
         {
-            bankTurn=false;AllowRcsTurnAssist=false;
+            bankTurn=false;rcsTurnActive=false;AllowRcsFlip=false;turnRequestDegPerSec=0;
             aim.Reset();
 
             // Restore command state, then return touched RCS computers to enabled pilot control.
@@ -813,6 +972,7 @@ namespace ZeoNav
 
         public void ReleaseAll(bool restorePriorThrust = true)
         {
+            CancelTurnCheck();
             EndThrustControl(restorePriorThrust);
             ReleaseGyros();
             RestoreDampeners();
@@ -872,6 +1032,8 @@ namespace ZeoNav
         public void ApplyDockRotation(Vector3D worldRate)
         {
             if(!gyroControlActive)BeginGyroControl();
+            rcsTurnActive=false;
+            ApplyGyroControlState();
             var g=EnsureActiveGyro();if(g==null)throw new InvalidOperationException("No navigation gyro available.");
             ReleaseTurnBank(g);
             var command=PrecisionAim.GyroCommand(worldRate,g.WorldMatrix);
@@ -882,10 +1044,6 @@ namespace ZeoNav
         {
             if (Gyros.Count == 0 || desiredForward.LengthSquared() < 1e-8) return false;
             if (!gyroControlActive) BeginGyroControl();
-            else ApplyGyroControlState(); // re-isolate SDX RCS attitude controllers every tick
-
-            Sandbox.ModAPI.IMyGyro g = EnsureActiveGyro();
-            if (g == null) return false;
 
             desiredForward.Normalize();
             double angle = ForwardAngleDegrees(desiredForward);
@@ -893,24 +1051,43 @@ namespace ZeoNav
             Vector3D angularVelocity=Vector3D.Zero; bool velocityKnown=true;
             try { angularVelocity=Controller.GetShipVelocities().AngularVelocity; LastAngularRateDeg=angularVelocity.Length()*180/Math.PI; }
             catch { LastAngularRateDeg=0; velocityKnown=false; }
+            SelectTurnBank(angle);
+            ApplyGyroControlState();
+            Sandbox.ModAPI.IMyGyro g = rcsTurnActive ? null : EnsureActiveGyro();
+            if(!rcsTurnActive && g==null)return false;
             Vector3D worldRate=Vector3D.Zero;
-            if(velocityKnown&&angle>5)
+            if(velocityKnown&&TurnAuthorityPolicy.FullBank(angle,toleranceDeg,angularVelocity.Length(),bankTurn||rcsTurnActive))
             {
                 Vector3D forward=Controller.WorldMatrix.Forward;
                 var axis=Vector3D.Cross(forward,desiredForward);
-                if(axis.LengthSquared()<1e-8)axis=Controller.WorldMatrix.Up;else axis.Normalize();
+                if(angle>175&&axis.LengthSquared()<.01)axis=ChooseHalfTurnAxis();
+                else if(axis.LengthSquared()<1e-8)axis=Controller.WorldMatrix.Up;
+                else axis.Normalize();
                 double radians=angle*Math.PI/180;
-                double rate=Math.Min(.35,Math.Sqrt(2*.08*radians));
-                worldRate=DockingMath.Limit(axis*Math.Min(rate,radians*1.5)-angularVelocity*.6,.35);
-                CommandTurnBank(worldRate);AimMode=AllowRcsTurnAssist?"TURN-BANK + RCS":"TURN-BANK";wasPrecision=false;
+                Vector3D fineRate=Vector3D.Zero;
+                bool fine=angle<=5&&precisionAim.TryRate(forward,desiredForward,angularVelocity,out fineRate);
+                if(fine)
+                {
+                    double limit=TurnAuthorityPolicy.FineRateLimit(radians,
+                        turnResponses[AxisIndex(axis)]);
+                    worldRate=DockingMath.Limit(fineRate,limit);
+                }
+                else
+                {
+                    double rate=AdaptiveRate(axis,radians);
+                    var sideways=angularVelocity-axis*Vector3D.Dot(angularVelocity,axis);
+                    worldRate=DockingMath.Limit(axis*Math.Min(rate,radians*1.5)-sideways*.6,2.5);
+                }
+                CommandTurnBank(worldRate);AimMode=fine?"TURN-BANK-FINE":"TURN-BANK";wasPrecision=false;
+                if(!rcsTurnActive)ObservePassiveTurn(axis,forward,angularVelocity,worldRate);
                 // Never shorten the braking reservation from an assisted turn:
                 // Spectrum may remove RCS authority before the later flip.
-                if(!AllowRcsTurnAssist&&angle>30&&LastAngularRateDeg>.2)
+                if(angle>30&&LastAngularRateDeg>.2)
                 {
                     observedTurnRate=observedTurnRate==0?LastAngularRateDeg:observedTurnRate*.98+LastAngularRateDeg*.02;
                     TurnAllowanceSeconds=Math.Max(20,180/observedTurnRate*1.5+10);
                 }
-                return false;
+                return PrecisionAim.Settled(angle,toleranceDeg,angularVelocity);
             }
             ReleaseTurnBank(g);
             bool precise=velocityKnown && precisionAim.TryRate(Controller.WorldMatrix.Forward,desiredForward,angularVelocity,out worldRate);
@@ -945,14 +1122,9 @@ namespace ZeoNav
 
         private static bool LooksLikeRcsGyro(Sandbox.ModAPI.IMyGyro gyro)
         {
-            string text = "";
-            try { text += gyro.CustomName + " "; } catch { }
-            try { text += gyro.BlockDefinition.ToString() + " "; } catch { }
-            try { text += gyro.DefinitionDisplayNameText + " "; } catch { }
-            return text.IndexOf("rcs", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   text.IndexOf("reaction control", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   (text.IndexOf("control computer", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                    text.IndexOf("gyro", StringComparison.OrdinalIgnoreCase) >= 0);
+            // Custom names are pilot-controlled and can contain "RCS" on an ordinary
+            // gyro. Only the workshop mod's actual computer subtype is isolated.
+            return IsRcsComputer(gyro);
         }
 
         private static string Mn(double n) { return (n / 1000000.0).ToString("0.0") + "MN"; }

@@ -23,6 +23,10 @@ namespace ZeoNav
         private IDictionary emitters;
         private double weakThreshold, strongThreshold, powerScalar;
         private bool registered;
+        private int registrationEpoch;
+        private object utilitiesOwner;
+        private Action unregister;
+        private int lastFrame = -1;
         private int lastRequestFrame = -100000;
         private int lastRegisterFrame = -100000;
         private long controlledGrid;
@@ -63,8 +67,13 @@ namespace ZeoNav
             lastRegisterFrame = frame;
             try
             {
-                if (MyAPIGateway.Utilities == null) return;
-                MyAPIGateway.Utilities.RegisterMessageHandler(Channel, InitializeApi);
+                var owner = MyAPIGateway.Utilities;
+                if (owner == null || MyAPIGateway.Session == null) return;
+                int epoch=++registrationEpoch;
+                Action<object> handler=payload=>{if(epoch==registrationEpoch)InitializeApi(payload);};
+                owner.RegisterMessageHandler(Channel, handler);
+                utilitiesOwner = owner;
+                unregister = () => owner.UnregisterMessageHandler(Channel, handler);
                 registered = true;
                 log("Spectrum API client registered on channel " + Channel);
                 RequestApi(frame);
@@ -78,7 +87,7 @@ namespace ZeoNav
         }
         private void InitializeApi(object payload)
         {
-            if (payload is string) return;
+            if (!registered || !ReferenceEquals(utilitiesOwner, MyAPIGateway.Utilities) || MyAPIGateway.Session == null || payload is string) return;
             Delegate endpoint = null;
             var ro = payload as IReadOnlyDictionary<string, Delegate>;
             var rw = payload as IDictionary<string, Delegate>;
@@ -146,8 +155,9 @@ namespace ZeoNav
         public void Update(int frame, ShipContext ship)
         {
             object current = MyAPIGateway.Session;
-            if (gameSession != null && !ReferenceEquals(current, gameSession)) ResetSession();
-            gameSession = current;
+            if (!ReferenceEquals(current, gameSession) || (registered && !ReferenceEquals(utilitiesOwner, MyAPIGateway.Utilities)) || frame < lastFrame) ResetSession();
+            gameSession = current; lastFrame = frame;
+            if (current == null) return;
             long grid = ship == null || ship.Grid == null ? 0 : ship.Grid.EntityId;
             lock (sync)
             {
@@ -172,9 +182,10 @@ namespace ZeoNav
         }
         public void ResetSession()
         {
+            ++registrationEpoch;
             Unbind();
-            try { if (registered && MyAPIGateway.Utilities != null) MyAPIGateway.Utilities.UnregisterMessageHandler(Channel, InitializeApi); } catch { }
-            registered = false; gameSession = null; lastRegisterFrame = lastRequestFrame = -100000;
+            try { unregister?.Invoke(); } catch { }
+            registered = false; gameSession = null; utilitiesOwner = null; unregister = null; lastFrame = -1; lastRegisterFrame = lastRequestFrame = -100000;
         }
         private void Unbind()
         {

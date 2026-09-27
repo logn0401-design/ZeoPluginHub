@@ -70,4 +70,5 @@
     <Compile Include="..\..\src\Shared\OverlayLifetime.cs" Link="Shared\OverlayLifetime.cs" />
     <Reference Include="System.Drawing" />
   </ItemGroup>
+<ItemGroup><Compile Include="../../src/Shared/NativeRowTextbox.cs" Link="Shared/NativeRowTextbox.cs" /><Compile Include="../../src/Shared/SettingHelp.cs" Link="Shared/SettingHelp.cs" /></ItemGroup>
 </Project>

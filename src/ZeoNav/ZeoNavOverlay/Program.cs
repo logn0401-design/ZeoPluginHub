@@ -91,11 +91,19 @@ namespace ZeoNavOverlay
             bool allowed = gameFocus || menuFocus;
             UpdateTargetSurface(ref targetHud,s,gameFocus&&receiver.Fresh&&s.TargetSelecting,streamerMode,true);
             UpdateTargetSurface(ref targetMarker,s,gameFocus&&receiver.Fresh&&s.TargetMarkerVisible,streamerMode);
-            bool showLock=gameFocus&&receiver.Fresh&&s.TargetLocked&&!s.TargetSelecting;
+            bool targetLayout=s.Layout!=null&&s.Layout.TargetLock;
+            bool showLock=gameFocus&&receiver.Fresh&&((s.TargetLocked&&!s.TargetSelecting)||targetLayout);
             if(showLock&&s.ClientW>10&&s.ClientH>10)
             {
                 if(targetBanner==null||targetBanner.IsDisposed)targetBanner=new HudForm();
-                targetBanner.SetStreamerMode(streamerMode);targetBanner.RenderTargetLock(s);
+                targetBanner.SetStreamerMode(streamerMode);targetBanner.RenderTargetLock(LayoutPreview(s));
+                if(targetLayout)
+                {
+                    RectangleF bounds=targetBanner.LastTargetLockBounds;
+                    Send(new NavCommand { Type="LAYOUT_BOUNDS",LayoutBounds=new NavLayoutBounds {
+                        Token=s.Layout.Token,X=bounds.X,Y=bounds.Y,Width=bounds.Width,Height=bounds.Height,ViewportW=s.ClientW,ViewportH=s.ClientH
+                    }});
+                }
             }
             else if(targetBanner!=null){targetBanner.EnsureHidden();targetBanner.Dispose();targetBanner=null;}
             timer.Interval=s.TargetSelecting?8:s.TargetMarkerVisible?16:50;
@@ -111,7 +119,7 @@ namespace ZeoNavOverlay
 
             string tripMode = s.Config == null ? "AUTO" : (s.Config.TripPanelVisibility ?? "AUTO").Trim().ToUpperInvariant();
             bool tripRequested = tripMode == "ALWAYS" ? true : tripMode == "HIDDEN" ? false : s.HudVisible;
-            bool layoutPreview=s.Layout!=null;
+            bool layoutPreview=s.Layout!=null&&!s.Layout.TargetLock;
             tripRequested=tripRequested || layoutPreview;
             if (tripRequested && allowed && s.ClientW > 10 && s.ClientH > 10)
             {
@@ -165,8 +173,9 @@ namespace ZeoNavOverlay
         {
             if(source.Layout==null) return source;
             var preview=source.Copy(); preview.Config=source.Config.Copy();
-            preview.Config.HudX=source.Layout.X; preview.Config.HudY=source.Layout.Y;
-            preview.Config.HudWidth=source.Layout.WidthScale; preview.Config.HudHeight=source.Layout.HeightScale;
+            if(source.Layout.TargetLock){preview.Config.TargetHudX=source.Layout.X;preview.Config.TargetHudY=source.Layout.Y;preview.Config.TargetHudWidth=source.Layout.WidthScale;preview.Config.TargetHudHeight=source.Layout.HeightScale;}
+            else {preview.Config.HudX=source.Layout.X; preview.Config.HudY=source.Layout.Y;
+                preview.Config.HudWidth=source.Layout.WidthScale; preview.Config.HudHeight=source.Layout.HeightScale;}
             return preview;
         }
 
@@ -485,6 +494,7 @@ namespace ZeoNavOverlay
     internal sealed class HudForm : Form
     {
         internal RectangleF LastPanelBounds { get; private set; }
+        internal RectangleF LastTargetLockBounds { get; private set; }
         private NavSnapshot s;
         private bool streamerMode = true;
         public bool CaptureApplied { get; private set; }
@@ -606,22 +616,34 @@ namespace ZeoNavOverlay
         }
         internal static Bitmap TargetLockBitmap(NavSnapshot snap)
         {
-            var bitmap=new Bitmap(380,54,PixelFormat.Format32bppPArgb);
+            var c=snap.Config ?? new NavConfig();
+            double ws=c.TargetHudWidth>0?c.TargetHudWidth:1, hs=c.TargetHudHeight>0?c.TargetHudHeight:1;
+            int width=Math.Max(190,Math.Min(Math.Max(190,snap.ClientW-12),(int)(380*Math.Min(3,ws))));
+            int height=Math.Max(27,Math.Min(Math.Max(27,snap.ClientH-12),(int)(54*Math.Min(3,hs))));
+            var bitmap=new Bitmap(width,height,PixelFormat.Format32bppPArgb);
             using(var g=Graphics.FromImage(bitmap))
-            using(var labelFont=new Font("Segoe UI",10,FontStyle.Bold))
-            using(var infoFont=new Font("Segoe UI",9,FontStyle.Regular))
             using(var red=new SolidBrush(Color.FromArgb(255,78,63)))
             using(var pale=new SolidBrush(Color.FromArgb(224,230,236)))
             using(var backing=new SolidBrush(Color.FromArgb(185,15,25,32)))
+            using(var format=new StringFormat { Trimming=StringTrimming.EllipsisCharacter, FormatFlags=StringFormatFlags.NoWrap })
             {
                 g.Clear(Color.Transparent);
                 g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                g.FillRectangle(backing,4,4,372,46);
-                g.FillRectangle(red,4,4,3,46);
-                string label="LOCKED // "+(snap.TargetLabel??"CONTACT");
-                g.DrawString(label,labelFont,red,new RectangleF(15,7,355,20));
-                string info="RANGE "+Dist(snap.TargetDistance)+"   REL "+snap.TargetRelativeSpeed.ToString("0.0")+" M/S   CTRL + RMB ABORT ALL";
-                g.DrawString(info,infoFont,pale,new RectangleF(15,28,355,18));
+                g.FillRectangle(backing,4,4,width-8,height-8);
+                g.FillRectangle(red,4,4,3,height-8);
+                // Derive each frame from saved preference; shrinking never overwrites it.
+                float row=(height-12)/2f;
+                float preferred=(float)(10*Math.Max(.5,Math.Min(3,c.TargetHudTextScale>0?c.TargetHudTextScale:1))*Math.Sqrt(hs));
+                float points=Math.Max(5,Math.Min(preferred,row*72/g.DpiY*.80f));
+                using(var labelFont=new Font("Segoe UI",points,FontStyle.Bold))
+                using(var infoFont=new Font("Segoe UI",points*.9f,FontStyle.Regular))
+                {
+                    string label=snap.Layout!=null&&snap.Layout.TargetLock&&!snap.TargetLocked ? "TARGET LOCK // LAYOUT PREVIEW" : "LOCKED // "+(snap.TargetLabel??"CONTACT");
+                    g.DrawString(label,labelFont,red,new RectangleF(15,6,width-25,row),format);
+                    string info="RANGE "+Dist(snap.TargetDistance)+"   REL "+snap.TargetRelativeSpeed.ToString("0.0")+" M/S";
+                    g.DrawString(info,infoFont,pale,new RectangleF(15,6+row,width-25,row),format);
+                }
+                if(snap.Layout!=null&&snap.Layout.TargetLock)using(var pen=new Pen(Color.White,1)){pen.DashStyle=DashStyle.Dash;g.DrawRectangle(pen,1,1,width-3,height-3);}
             }
             return bitmap;
         }
@@ -629,7 +651,18 @@ namespace ZeoNavOverlay
         {
             if(!IsHandleCreated){CreateControl();Native.ShowWindow(Handle,Native.SW_HIDE);}
             using(var bitmap=TargetLockBitmap(snap))
-                Present(bitmap,snap.ClientX+(snap.ClientW-bitmap.Width)/2,snap.ClientY+20);
+            {
+                var bounds=TargetLockBounds(snap.ClientW,snap.ClientH,bitmap.Width,bitmap.Height,snap.Config);
+                LastTargetLockBounds=bounds;
+                Present(bitmap,snap.ClientX+(int)bounds.X,snap.ClientY+(int)bounds.Y);
+            }
+        }
+        internal static RectangleF TargetLockBounds(int width,int height,int bannerW,int bannerH,NavConfig config)
+        {
+            double x=config == null ? .76 : config.TargetHudX, y = config == null ? -.76 : config.TargetHudY;
+            float left=(float)Math.Max(6,Math.Min(Math.Max(6,width-bannerW-6),(x+1)*width/2-bannerW/2));
+            float top=(float)Math.Max(6,Math.Min(Math.Max(6,height-bannerH-6),(1-y)*height/2));
+            return new RectangleF(left,top,bannerW,bannerH);
         }
 
         public void Render(NavSnapshot snapshot, Rectangle gameBounds)
@@ -709,7 +742,7 @@ namespace ZeoNavOverlay
         // show only an outline; previews never fabricate flight/sensor data or enable HUD visibility.
         internal void DrawPanelContent(Graphics g,RectangleF localPanel,RectangleF clientPanel)
         {
-            if(s.Layout==null) { DrawSizedHud(g,localPanel); return; }
+            if(s.Layout==null||s.Layout.TargetLock) { DrawSizedHud(g,localPanel); return; }
             string mode=(s.Config.TripPanelVisibility??"AUTO").ToUpperInvariant();
             bool actual=mode!="HIDDEN" && (mode=="ALWAYS" || s.HudVisible);
             if(actual) DrawSizedHud(g,localPanel);

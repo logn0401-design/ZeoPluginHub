@@ -21,32 +21,48 @@ namespace ZeoNav
         private long lockedId;
         private bool intercept,arrived,rcsSetting;
         internal bool Active {get;private set;}
+        internal bool RequestedIntercept {get;private set;}
         internal string Status="Target flight idle.";
         internal double Distance,RelativeSpeed;
         internal double Ceiling {get{return Math.Min(config().MaxDriveSigKm,Math.Min(config().ApproachSigEnabled?config().ApproachSigKm:750,config().DepartureSigEnabled?config().DepartureSigKm:750));}}
         internal string Mode {get{return intercept?"INTERCEPT":config().MatchKeep?"KEEP MATCHED":"MATCH ONCE";}}
         internal TargetFlight(Func<ShipContext> s,Func<NavConfig> c,Func<SpectrumAdapter> sp,TargetTracker t,Action<string> logger)
         {ship=s;config=c;spectrum=sp;tracker=t;log=logger;}
+        internal bool CanStart(bool chase,int tick,double now)
+        {
+            var s=ship();var target=tracker.Locked;
+            if(s==null||!tracker.Confirmed||target==null){Status="Lock a Spectrum signal first.";return false;}
+            if(!target.Fresh(tick,now)){Status="Signal locked; waiting for three fresh tracking samples before flight.";return false;}
+            if(!s.Motion.Ready||s.HasDockConnection()||s.Gravity.Length()>.05){Status="Requires verified motion, undocked ship and open space.";return false;}
+            if(spectrum()==null||!spectrum().DriveKmReady){Status="Wait for fresh own Spectrum SIG before target flight.";return false;}
+            Distance=Vector3D.Distance(target.Position(tick),s.Position);
+            if(Distance<MinimumSeparation(s)){Status="Too close for target-flight preview; use manual RCS.";return false;}
+            if(chase&&!InterceptHasRoom(Distance,config().InterceptStandOffKm*1000,MinimumSeparation(s)))
+            {
+                Status="Already inside intercept stand-off ("+config().InterceptStandOffKm.ToString("0")+" km); lower it or choose Match Velocity.";
+                log("TARGET FLIGHT PREFLIGHT // "+Status);
+                return false;
+            }
+            Vector3D relativePosition=target.Position(tick)-s.Position,relativeVelocity=target.Sample.Velocity-s.Velocity;
+            double closestTime=relativeVelocity.LengthSquared()>1?Math.Max(0,Math.Min(12,-Vector3D.Dot(relativePosition,relativeVelocity)/relativeVelocity.LengthSquared())):0;
+            if((relativePosition+relativeVelocity*closestTime).Length()<MinimumSeparation(s)*2){Status="Closing too fast to acquire safely; match manually first.";return false;}
+            s.Scan();if(s.Gyros.Count==0){Status="No available gyro.";return false;}
+            return true;
+        }
         internal void Start(bool chase,int tick,double now)
         {
             if(Active){Abort("Target flight cancelled.");return;}
-            var s=ship();var target=tracker.Locked;
-            if(s==null||!tracker.Confirmed||target==null){Status="Lock a Spectrum signal first.";return;}
-            if(!target.Fresh(tick,now)){Status="Signal locked; waiting for three fresh tracking samples before flight.";return;}
-            if(!s.Motion.Ready||s.HasDockConnection()||s.Gravity.Length()>.05){Status="Requires verified motion, undocked ship and open space.";return;}
-            Distance=Vector3D.Distance(target.Position(tick),s.Position);
-            if(Distance<MinimumSeparation(s)){Status="Too close for target-flight preview; use manual RCS.";return;}
-            Vector3D relativePosition=target.Position(tick)-s.Position,relativeVelocity=target.Sample.Velocity-s.Velocity;
-            double closestTime=relativeVelocity.LengthSquared()>1?Math.Max(0,Math.Min(12,-Vector3D.Dot(relativePosition,relativeVelocity)/relativeVelocity.LengthSquared())):0;
-            if((relativePosition+relativeVelocity*closestTime).Length()<MinimumSeparation(s)*2){Status="Closing too fast to acquire safely; match manually first.";return;}
-            s.Scan();if(s.Gyros.Count==0){Status="No available gyro.";return;}
-            intercept=chase;arrived=false;rcsSetting=config().MatchRcsOnly;lockedId=tracker.LockedId;budget=null;quiet=settled=0;generation=-1;staleSince=-1;alignmentLogged=false;input.Reset();motion.Reset();clock.Restart();
+            if(!CanStart(chase,tick,now))return;
+            var s=ship();
+            RequestedIntercept=chase;intercept=chase;arrived=false;rcsSetting=config().MatchRcsOnly;lockedId=tracker.LockedId;budget=null;quiet=settled=0;generation=-1;staleSince=-1;alignmentLogged=false;input.Reset();motion.Reset();clock.Restart();
             s.SaveDampenersOnce();s.SetDampeners(false);s.BeginThrustControl();s.BeginGyroControl();s.ClearThrust();
             Active=true;Status="ACQUIRING QUIET OWN SIGNAL / THRUST OFF";log("TARGET FLIGHT START // "+Mode+" id="+lockedId+" distance="+Distance);
         }
         private double MinimumSeparation(ShipContext s){return Math.Max(500,s.Grid.WorldVolume.Radius*3);}
+        internal static bool InterceptHasRoom(double distance,double standOff,double separation)
+        {return SignalBudget.Finite(distance)&&SignalBudget.Finite(standOff)&&SignalBudget.Finite(separation)&&distance>Math.Max(standOff,separation*2);}
         internal void Abort(string reason)
-        {if(Active){ship()?.ReleaseAll(false);log("TARGET FLIGHT RELEASE // "+reason);}Active=false;Status=reason;clock.Stop();}
+        {bool wasActive=Active;Active=false;Status=reason;clock.Stop();if(wasActive){ship()?.ReleaseAll(false);log("TARGET FLIGHT RELEASE // "+reason);}}
         internal void Update(int tick,double now)
         {
             if(!Active)return;
@@ -115,7 +131,7 @@ namespace ZeoNav
             double closing=Vector3D.Dot(s.Velocity-t.Sample.Velocity,displacement/Distance);
             if(closing>RendezvousMath.ClosingLimit(Distance-MinimumSeparation(s),rcsAuthority,s.TurnAllowanceSeconds)*1.1)
             {Abort("Closing speed exceeds verified separation envelope; manual control required.");return;}
-            Vector3D desired=intercept?RendezvousMath.GoalVelocity(displacement,t.Sample.Velocity,standOff,Math.Min(acceleration,rcsAuthority),s.TurnAllowanceSeconds,cap):t.Sample.Velocity;
+            Vector3D desired=DesiredVelocity(intercept,displacement,t.Sample.Velocity,standOff,Math.Min(acceleration,rcsAuthority),s.TurnAllowanceSeconds,cap);
             Vector3D error=desired-s.Velocity;
             bool close=Distance<standOff+500;
             if(intercept&&close&&RelativeSpeed<1){intercept=false;arrived=true;desired=t.Sample.Velocity;error=desired-s.Velocity;log("INTERCEPT ARRIVED // switching to velocity match");}
@@ -144,5 +160,7 @@ namespace ZeoNav
             Status=Mode+" / relative "+RelativeSpeed.ToString("0.0")+" m/s / "+(Distance/1000).ToString("0.0")+" km / SIG "+ceiling.ToString("0");
             if(!intercept&&settled>=60&&!c.MatchKeep){Abort(arrived?"INTERCEPT COMPLETE / VELOCITY MATCHED":"VELOCITY MATCHED / controls released");s.SetDampeners(false);}
         }
+        internal static Vector3D DesiredVelocity(bool intercept,Vector3D displacement,Vector3D targetVelocity,double standOff,double acceleration,double turnSeconds,double cap)
+        {return intercept?RendezvousMath.GoalVelocity(displacement,targetVelocity,standOff,acceleration,turnSeconds,cap):targetVelocity;}
     }
 }

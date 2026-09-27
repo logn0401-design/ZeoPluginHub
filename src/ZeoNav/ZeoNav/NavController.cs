@@ -64,10 +64,10 @@ namespace ZeoNav
         private bool flipTargetSet;
         private Vector3D manualFlipTarget;
         private DateTime flipStartedUtc = DateTime.MinValue;
+        private readonly TurnProgressWatchdog flipProgress = new TurnProgressWatchdog();
         private double learnedFlipSeconds;
 
-        private SignalBudget signalBudget,rcsTurnBudget;
-        private int rcsTurnTopology=-1;
+        private SignalBudget signalBudget;
         private int signalGovernorSampleGeneration = -1;
         private long signalGovernorGridId;
         private string signalGovernorState = "IDLE";
@@ -125,6 +125,7 @@ namespace ZeoNav
 
             AbortInternal(false, "NEW ROUTE");
             NavConfig c = getConfig();
+            s.FlipAxisMode=c.FlipAxisMode;s.FlipTurnMode=c.FlipTurnMode;s.RcsFlipAdvantagePct=c.RcsFlipAdvantagePct;
             approachActive=false;departureCleared=false;
             PrepareSignalGovernor(s, c);
             routeStart = s.Position;
@@ -187,17 +188,21 @@ namespace ZeoNav
             // This also works from rest and makes the completion angle unambiguous.
             s.ReleaseGyros();
             s.BeginGyroControl();
+            var flipConfig=getConfig();
+            s.FlipAxisMode=flipConfig.FlipAxisMode;s.FlipTurnMode=flipConfig.FlipTurnMode;s.RcsFlipAdvantagePct=flipConfig.RcsFlipAdvantagePct;
             Vector3D v = s.Velocity;
             double vmag = v.Length();
             manualFlipTarget = s.Controller.WorldMatrix.Backward;
             if (manualFlipTarget.LengthSquared() < 1e-8) { warning = "FLIP TARGET INVALID"; s.ReleaseGyros(); return; }
             manualFlipTarget.Normalize();
             manualFlip = true;
+            s.ResetFlipTurn();
             active = false;
             flipStartedUtc = DateTime.UtcNow;
             warning = "";
             onTargetTicks = 0;
             manualFlipDeg = s.ForwardAngleDegrees(manualFlipTarget);
+            flipProgress.Reset(DateTime.UtcNow,manualFlipDeg);
             SetPhase(NavPhase.MANUAL_FLIP, "manual exact 180 / frozen backward target");
             log("MANUAL FLIP TARGET FROZEN // initial error=" + manualFlipDeg.ToString("0.0") + "deg speed=" + vmag.ToString("0.0") + "m/s // " + s.ForceSummary);
         }
@@ -206,7 +211,7 @@ namespace ZeoNav
 
         private void AbortInternal(bool showState, string reason)
         {
-            pilotInput.Reset();motionRevalidation.Reset();momentumEntry=false;rcsTurnBudget=null;rcsTurnTopology=-1;
+            pilotInput.Reset();motionRevalidation.Reset();momentumEntry=false;
             ShipContext s = getShip();
             if (s != null) s.ReleaseAll(false);
             bool was = active || manualFlip;
@@ -224,7 +229,6 @@ namespace ZeoNav
         {
             ShipContext s = getShip();
             if (s == null) return;
-            s.AllowRcsTurnAssist=false;
             s.BeginThrustFrame();
             try
             {
@@ -240,7 +244,6 @@ namespace ZeoNav
             if (manualFlip)
             {
                 if (getConfig().AbortOnManualInput && HasManualInput(s.Controller,frame)) { Abort("MANUAL PILOT INPUT"); return; }
-                ConfigureManualFlipRcs(s, getConfig());
                 idleStatusTicks = 0; UpdateManualFlip(s); return;
             }
             if (!active)
@@ -310,6 +313,7 @@ namespace ZeoNav
             Vector3D vel = s.Velocity;
             double speed = vel.Length();
             s.RcsOnly=false; // Each frame chooses the required bank before commands commit.
+            s.AllowRcsFlip=false;
             double stopAssistSpeed=5;
             double closing = dir.LengthSquared() > 0 ? Vector3D.Dot(vel, dir) : 0;
             Vector3D lateralVec = vel - dir * closing;
@@ -334,25 +338,11 @@ namespace ZeoNav
                 return;
             }
             signalWaitStarted = -1;
-            // The RCS computer can add rotational authority during large
-            // prograde and retrograde turns. Orient() releases it below five
-            // degrees, so the proven single-gyro precision hold takes over.
-            // Main drives remain gated separately by real heading alignment.
-            if(c.RcsTurnAssist&&TurnAssistPhase(phase)&&signalBudget!=null&&signalBudget.Ready)
-            {
-                var feed=getSpectrum();
-                if(feed!=null&&feed.DriveKmReady&&feed.DriveKm<ActiveSigKm(c)*.9)
-                {
-                    if(rcsTurnBudget==null||rcsTurnTopology!=s.TopologyRevision){rcsTurnBudget=feed.BuildBudget(s,true);rcsTurnTopology=s.TopologyRevision;}
-                    rcsTurnBudget.SphericalBaseSquared=signalBudget.SphericalBaseSquared;rcsTurnBudget.DirectionalBaseSquared=signalBudget.DirectionalBaseSquared;
-                    rcsTurnBudget.FeedbackScale=Math.Max(1,signalBudget.FeedbackScale);
-                    double worst=rcsTurnBudget.PredictedSquared(new double[]{1,1,1,1,1,1});
-                    s.AllowRcsTurnAssist=SignalBudget.Finite(worst)&&worst<Math.Pow(ActiveSigKm(c)*.85,2);
-                }
-            }
-            stopAssistSpeed=StopAssistSpeed(s);
-            if(dampenerAssist&&(speed>stopAssistSpeed||!CanAssistDampeners()||
-                (phase!=NavPhase.INITIAL_BRAKE&&(phase!=NavPhase.TERMINAL_SETTLE||dist>c.ArrivalRadiusMeters))))
+            stopAssistSpeed=StopAssistSpeed(s,c.TerminalHandoffMaxMps);
+            if(dampenerAssist&&(!CanAssistDampeners()||
+                (phase==NavPhase.BRAKE?!EarlyDampenerEnvelope(speed,dist,RcsStopAcceleration(s),c.ArrivalRadiusMeters,c.DampenerEntryMaxMps):
+                speed>stopAssistSpeed||
+                (phase!=NavPhase.INITIAL_BRAKE&&(phase!=NavPhase.TERMINAL_SETTLE||dist>c.ArrivalRadiusMeters)))))
                 AssistDampeners(s,false);
             if (warning.Contains("SIG") || warning.Contains("SIGNATURE")) warning = "";
             double mass = s.Mass;
@@ -365,7 +355,7 @@ namespace ZeoNav
             double plannedBrakeRatio=ApproachProfile.Ratio(signalBudget,Math.Min(ActiveSigKm(c),ApproachProfile.Arrival(c)));
             double availableBrake=fullThrusterAccel*plannedBrakeRatio-gravityAlongRoute;
             if(availableBrake<.01){Abort("APPROACH SIG TOO LOW FOR BRAKING / RAISE LIMIT");return;}
-            double brakeAccel=availableBrake;
+            double brakeAccel=availableBrake*.8; // reserve 20% corrective authority
             double emergencyBrakeAccel = Math.Max(.01, fullThrusterAccel - gravityAlongRoute);
             if (emergencyBrakeAccel < .05) { Abort("BRAKING AUTHORITY TOO LOW"); return; }
             commandSpeed = GetSpeedCap(c, effectiveDriveRatio);
@@ -412,6 +402,8 @@ namespace ZeoNav
             {
                 case NavPhase.INITIAL_BRAKE:
                     s.ClearThrust();
+                    if(UseTerminalAtLowSpeed(speed,dist,stopAssistSpeed,c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
+                    {AssistDampeners(s,false);SetPhase(NavPhase.TERMINAL_SETTLE,"low-speed arrival / no main-drive flip");break;}
                     if(speed<=stopAssistSpeed)FinishLowSpeedStop(s,vel);
                     else
                     {
@@ -420,21 +412,30 @@ namespace ZeoNav
                         if(s.ForwardAngleDegrees(retro)<=2)s.SetMove(MoveDir.Forward,Math.Min(effectiveDriveRatio,speed/(Math.Max(.01,fullThrusterAccel)*.8)));
                     }
                     if(speed<=.3)onTargetTicks++;else onTargetTicks=0;
-                    if(onTargetTicks>=15){AssistDampeners(s,false);SetPhase(dist<=250?NavPhase.TERMINAL_SETTLE:NavPhase.ALIGN_PROGRADE,"initial motion stopped");}
+                    if(onTargetTicks>=15){AssistDampeners(s,false);SetPhase(dist<=TerminalEnvelope(c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters)?NavPhase.TERMINAL_SETTLE:NavPhase.ALIGN_PROGRADE,"initial motion stopped");}
                     break;
                 case NavPhase.CANCEL_LATERAL:
                     s.ClearThrust();
+                    if(UseTerminalAtLowSpeed(speed,dist,stopAssistSpeed,c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
+                    {SetPhase(NavPhase.TERMINAL_SETTLE,"low-speed arrival / no main-drive flip");break;}
                     if (lateral <= 1.0 || speed <= 1.0) { SetPhase(NavPhase.ALIGN_PROGRADE, "lateral clean"); break; }
                     s.ApplyWorldAcceleration(-lateralVec / 1.5, 1);
                     break;
 
                 case NavPhase.ALIGN_PROGRADE:
                     s.ClearThrust();
+                    if(UseTerminalAtLowSpeed(speed,dist,stopAssistSpeed,c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
+                    {SetPhase(NavPhase.TERMINAL_SETTLE,"low-speed arrival / no main-drive flip");break;}
+                    if(speed<=5&&!s.AdaptiveTurnReady&&c.FlipTurnMode!="RCS")
+                    {warning="CHECKING TURN RESPONSE / THRUST OFF";if(!s.PrepareRouteTurn())break;}
+                    if(warning=="CHECKING TURN RESPONSE / THRUST OFF")warning="";
                     if (s.Orient(dir, 0.25)) onTargetTicks++; else onTargetTicks = 0;
                     if (onTargetTicks >= 6) { onTargetTicks = 0; SetPhase(NavPhase.ACCELERATE, "prograde aligned"); }
                     break;
 
                 case NavPhase.ACCELERATE:
+                    if(UseTerminalAtLowSpeed(speed,dist,stopAssistSpeed,c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
+                    {s.ClearThrust();SetPhase(NavPhase.TERMINAL_SETTLE,"low-speed arrival / no main-drive flip");break;}
                     if (stopDistance >= dist) { s.ClearThrust(); SetPhase(NavPhase.PRE_FLIP, "brake boundary reached"); break; }
                     // Attitude acquisition is gyro-only. Do not start/continue the main
                     // drive burn while the nose is outside the prograde gate.
@@ -455,6 +456,8 @@ namespace ZeoNav
 
                 case NavPhase.COAST:
                     s.ClearThrust();
+                    if(UseTerminalAtLowSpeed(speed,dist,stopAssistSpeed,c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
+                    {SetPhase(NavPhase.TERMINAL_SETTLE,"low-speed arrival / no main-drive flip");break;}
                     s.Orient(dir, 0.25);
                     if (stopDistance >= dist) SetPhase(NavPhase.PRE_FLIP, "flip boundary reached");
                     else if (speed < commandSpeed * .995 && dist > stopDistance * 1.05) SetPhase(NavPhase.ACCELERATE, "speed below cruise band");
@@ -473,12 +476,15 @@ namespace ZeoNav
                     flipTarget.Normalize();
                     flipTargetSet = true;
                     flipStartedUtc = DateTime.UtcNow;
+                    flipProgress.Reset(flipStartedUtc,s.ForwardAngleDegrees(flipTarget));
+                    s.ResetFlipTurn();
                     log("AUTO FLIP TARGET FROZEN // angle=" + s.ForwardAngleDegrees(flipTarget).ToString("0.0") + "deg allowance=" + flipAllowance.ToString("0.0") + "s");
                     SetPhase(NavPhase.FLIP, "auto flip / frozen retro target");
                     break;
 
                 case NavPhase.FLIP:
                     s.ClearThrust();
+                    s.AllowRcsFlip=true;
                     if (!flipTargetSet)
                     {
                         flipTarget = s.Controller.WorldMatrix.Backward;
@@ -488,6 +494,7 @@ namespace ZeoNav
                     }
                     manualFlipDeg = s.ForwardAngleDegrees(flipTarget);
                     if (s.Orient(flipTarget, .08)) onTargetTicks++; else onTargetTicks = 0;
+                    if(!WatchFlipProgress(s,"AUTO"))break;
                     if (onTargetTicks >= 6)
                     {
                         onTargetTicks = 0;
@@ -498,10 +505,14 @@ namespace ZeoNav
                     break;
 
                 case NavPhase.BRAKE:
-                    if(speed<=Math.Max(20,stopAssistSpeed)&&dist<=Math.Max(250,c.ArrivalRadiusMeters*20))
+                    if(speed<=Math.Max(20,stopAssistSpeed)&&dist<=TerminalEnvelope(c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
                     {s.ClearThrust();SetPhase(NavPhase.TERMINAL_SETTLE,"low-speed terminal envelope");break;}
-                    if(speed<=5&&dist>Math.Max(250,c.ArrivalRadiusMeters*20))
+                    if(speed<=5&&dist>TerminalEnvelope(c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
                     {s.ClearThrust();SetPhase(NavPhase.INITIAL_BRAKE,"stopped short; prepare bounded continuation");break;}
+                    // Keep one controller through brake and terminal approach. Native
+                    // dampeners take over only for the final stop, avoiding on/off/on
+                    // handoffs while the ship is still outside its arrival radius.
+                    AssistDampeners(s,false);
                     Vector3D retroDir = speed > .5 ? -vel / speed : -dir;
                     // Braking attitude acquisition is also gyro-only. No forward-drive
                     // retro burn is allowed until the real gyro bank has the nose inside
@@ -515,10 +526,10 @@ namespace ZeoNav
                     // With the ship retrograde, forward thrust opposes travel.
                     // Compute the thrust ratio needed to make the stop, including gravity.
                     // A disturbance or lower MAX SIG can make the planned stop unattainable.
-                    double desiredDecel = closingPositive > 0 && dist > 1 ? closingPositive * closingPositive / (2 * Math.Max(1, dist * .82)) : 0;
+                    double desiredDecel = ArrivalBraking.Deceleration(closingPositive,dist,brakeAccel,availableBrake,Math.Max(10,c.ArrivalRadiusMeters*2));
                     double requiredThrusterAccel = Math.Max(0, desiredDecel + gravityAlongRoute);
                     double needed = requiredThrusterAccel * mass / Math.Max(1, s.Force(MoveDir.Forward));
-                    needed = Math.Max(0.0, Math.Min(1.0, needed * 1.15));
+                    needed = Math.Max(0.0, Math.Min(1.0, needed));
                     double brakeCommand = closing<0?effectiveDriveRatio:Math.Min(needed, effectiveDriveRatio);
                     if (needed > effectiveDriveRatio + .03)
                     {
@@ -537,9 +548,9 @@ namespace ZeoNav
 
         private void UpdateTerminal(ShipContext s, NavConfig c, Vector3D displacement, double dist, Vector3D vel, double speed)
         {
-            double stopAssistSpeed=StopAssistSpeed(s);
+            double stopAssistSpeed=StopAssistSpeed(s,c.TerminalHandoffMaxMps);
             if(speed>Math.Max(20,stopAssistSpeed)){AssistDampeners(s,false);SetPhase(NavPhase.INITIAL_BRAKE,"terminal speed requires main-drive braking");return;}
-            if(dist>Math.Max(250,c.ArrivalRadiusMeters*20))
+            if(dist>TerminalEnvelope(c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
             {AssistDampeners(s,false);SetPhase(NavPhase.INITIAL_BRAKE,"replan long terminal recovery");return;}
             if(dist<=c.ArrivalRadiusMeters&&speed<=stopAssistSpeed)FinishLowSpeedStop(s,vel);
             if (dist <= c.ArrivalRadiusMeters && speed <= c.ArrivalSpeedMps)
@@ -560,7 +571,7 @@ namespace ZeoNav
             s.RcsOnly=speed<=stopAssistSpeed&&HasRcsStopAuthority(s);
             if(s.RcsOnly)s.Orient(s.Controller.WorldMatrix.Forward,2);
             Vector3D dir = dist > .001 ? displacement / dist : Vector3D.Zero;
-            double desiredSpeed = Math.Min(18.0, Math.Max(0, dist * .22));
+            double desiredSpeed = Math.Min(c.TerminalCruiseMps, Math.Max(0, dist * .22));
             if (dist < 30) desiredSpeed = Math.Min(desiredSpeed, 3.0);
             // Terminal correction also honors gyro-only attitude acquisition. If the
             // ship is still moving appreciably, get the real gyro bank close to live
@@ -587,6 +598,22 @@ namespace ZeoNav
 
         private bool CanAssistDampeners()
         { return signalBudget!=null&&signalBudget.Ready&&signalBudget.PredictedSquared(new double[]{1,1,1,1,1,1})<=Math.Pow(signalBudget.TargetKm*SignalBudget.RangeMargin,2); }
+        internal static double TerminalEnvelope(double arrivalRadius)
+        { return Math.Max(1000,arrivalRadius*20); }
+        internal static double TerminalEnvelope(double arrivalRadius,double configured)
+        { return Math.Max(configured,arrivalRadius*20); }
+        internal static bool UseTerminalAtLowSpeed(double speed,double distance,double stopAssistSpeed,double arrivalRadius)
+        { return speed<=Math.Max(5,stopAssistSpeed)&&distance<=TerminalEnvelope(arrivalRadius); }
+        internal static bool UseTerminalAtLowSpeed(double speed,double distance,double stopAssistSpeed,double arrivalRadius,double envelope)
+        { return speed<=Math.Max(5,stopAssistSpeed)&&distance<=TerminalEnvelope(arrivalRadius,envelope); }
+        internal static bool EarlyDampenerEnvelope(double speed,double distance,double rcsDecel,double arrivalRadius)
+        {return EarlyDampenerEnvelope(speed,distance,rcsDecel,arrivalRadius,100);}
+        internal static bool EarlyDampenerEnvelope(double speed,double distance,double rcsDecel,double arrivalRadius,double maxSpeed)
+        {
+            if(maxSpeed<=0||speed<=0||speed>maxSpeed||rcsDecel<.625||distance<=arrivalRadius)return false;
+            double stop=speed*speed/(2*rcsDecel)*1.35;
+            return stop<distance&&distance<=Math.Max(1500,arrivalRadius*200);
+        }
         private void AssistDampeners(ShipContext s,bool enabled)
         {
             if(dampenerAssist==enabled)return;
@@ -596,7 +623,7 @@ namespace ZeoNav
         private void FinishLowSpeedStop(ShipContext s,Vector3D velocity)
         {
             s.Orient(s.Controller.WorldMatrix.Forward,2);
-            bool allowed=CanAssistDampeners();
+            bool allowed=getConfig().TerminalDampeners&&CanAssistDampeners();
             AssistDampeners(s,allowed);s.ClearThrust();
             s.RcsOnly=!allowed&&HasRcsStopAuthority(s);
             if(!allowed)s.ApplyWorldAcceleration(-velocity/.8,1);
@@ -610,10 +637,12 @@ namespace ZeoNav
         private static bool HasRcsStopAuthority(ShipContext s)
         {return RcsStopAcceleration(s)>=.625;}
         internal static double StopAssistSpeed(ShipContext s)
+        {return StopAssistSpeed(s,50);}
+        internal static double StopAssistSpeed(ShipContext s,double maximum)
         {
             // Budget conservatively includes every bank member even in RCS-only mode.
             // Bound the handoff by roughly eight seconds of verified RCS deceleration.
-            return Math.Max(5,Math.Min(50,RcsStopAcceleration(s)*8));
+            return Math.Max(5,Math.Min(maximum,RcsStopAcceleration(s)*8));
         }
 
         private void UpdateManualFlip(ShipContext s)
@@ -626,6 +655,7 @@ namespace ZeoNav
             }
             manualFlipDeg = s.ForwardAngleDegrees(manualFlipTarget);
             if (s.Orient(manualFlipTarget, .08)) onTargetTicks++; else onTargetTicks = 0;
+            if(!WatchFlipProgress(s,"MANUAL"))return;
             if (onTargetTicks >= 6)
             {
                 double measured = ObserveFlipTime("MANUAL");
@@ -637,27 +667,31 @@ namespace ZeoNav
             }
         }
 
-        private void ConfigureManualFlipRcs(ShipContext s, NavConfig c)
+        private bool WatchFlipProgress(ShipContext s,string mode)
         {
-            if (s == null || c == null || !c.RcsTurnAssist) return;
-            SpectrumAdapter feed = getSpectrum();
-            double ceiling = TargetSigKm(c);
-            if (feed == null || !feed.DriveKmReady || !SignalBudget.Finite(ceiling) || ceiling <= 0 ||
-                feed.DriveKm >= ceiling * .9) return;
-            try
+            var now=DateTime.UtcNow;
+            var result=flipProgress.Observe(now,manualFlipDeg,s.LastAngularRateDeg,
+                s.TurnRequestDegPerSec,s.CommandedTurnGyros);
+            if(result==TurnProgress.Continue)return true;
+            string evidence="angle="+manualFlipDeg.ToString("0.00")+"deg rate="+
+                s.LastAngularRateDeg.ToString("0.00")+"deg/s request="+
+                s.TurnRequestDegPerSec.ToString("0.00")+"deg/s readback="+
+                s.TurnReadbackDegPerSec.ToString("0.00")+"deg/s gyros="+
+                s.CommandedTurnGyros+" // "+s.ForceSummary;
+            if(result==TurnProgress.Recover)
             {
-                if (rcsTurnBudget == null || rcsTurnTopology != s.TopologyRevision)
-                {
-                    rcsTurnBudget = feed.BuildBudget(s, true);
-                    rcsTurnTopology = s.TopologyRevision;
-                }
-                rcsTurnBudget.SphericalBaseSquared = feed.SphericalWeakKm * feed.SphericalWeakKm;
-                rcsTurnBudget.DirectionalBaseSquared = feed.DirectionalWeakKm * feed.DirectionalWeakKm;
-                rcsTurnBudget.FeedbackScale = 1;
-                double worst = rcsTurnBudget.PredictedSquared(new double[] { 1, 1, 1, 1, 1, 1 });
-                s.AllowRcsTurnAssist = SignalBudget.Finite(worst) && worst < Math.Pow(ceiling * .85, 2);
+                log(mode+" FLIP AUTHORITY RETRY // "+evidence);
+                s.ReleaseGyros();
+                s.FlipTurnMode="GYRO";
+                s.BeginGyroControl();
+                onTargetTicks=0;
+                warning="RETRYING STANDARD GYRO TURN";
+                return false;
             }
-            catch { s.AllowRcsTurnAssist = false; }
+            Abort(mode+" FLIP STALLED // "+(s.CommandedTurnGyros==0||s.TurnReadbackDegPerSec<.05?
+                "GYRO COMMAND NOT HELD":"NO MEASURED ROTATION"));
+            log(mode+" FLIP STALLED // "+evidence);
+            return false;
         }
 
         private static string GyroUnavailable(ShipContext s)
@@ -686,8 +720,6 @@ namespace ZeoNav
         private double ActiveSigKm(NavConfig c)
         { return ApproachProfile.Effective(c,active&&!departureCleared,approachActive); }
 
-        internal static bool TurnAssistPhase(NavPhase p)
-        {return p==NavPhase.ALIGN_PROGRADE||p==NavPhase.ACCELERATE||p==NavPhase.COAST||p==NavPhase.FLIP||p==NavPhase.INITIAL_BRAKE||p==NavPhase.BRAKE;}
 
         private double EstimateSignalRatio(NavConfig c, ShipContext s)
         {
@@ -847,7 +879,9 @@ namespace ZeoNav
         private double FlipAllowance(NavConfig c)
         {
             double configured = c == null ? 20.0 : Math.Max(1.0, c.FlipTimeSeconds);
-            configured=Math.Max(configured,getShip()?.TurnAllowanceSeconds??180);
+            var ship=getShip();
+            if(ship!=null&&ship.AdaptiveTurnReady)return Math.Max(configured,ship.AdaptiveTurnAllowance);
+            configured=Math.Max(configured,ship?.TurnAllowanceSeconds??180);
             if (learnedFlipSeconds <= 0) return configured;
             // Keep 25% margin over the slowest measured 180 this session. The value is
             // runtime-only; ADVANCED still lets the pilot set a persistent allowance.
@@ -861,6 +895,7 @@ namespace ZeoNav
             flipStartedUtc = DateTime.MinValue;
             if (seconds < .25 || seconds > 1800 || double.IsNaN(seconds) || double.IsInfinity(seconds)) return 0;
             if (seconds > learnedFlipSeconds) learnedFlipSeconds = seconds;
+            getShip()?.RecordFlipTime(seconds);
             log((source ?? "FLIP") + " 180 MEASURED // " + seconds.ToString("0.00") + "s // learned allowance=" + (learnedFlipSeconds * 1.25).ToString("0.00") + "s");
             return seconds;
         }
@@ -1015,9 +1050,9 @@ namespace ZeoNav
             if (s != null && c != null) UpdatePreview(s, c);
             snap.Ship = s == null ? "NO CONTROLLED SHIP" : s.Name;
             snap.State = active ? "ACTIVE" : manualFlip ? "MANUAL" : phase == NavPhase.ARRIVED ? "ARRIVED" : phase == NavPhase.ABORTED ? "ABORTED" : "DISARMED";
-            snap.Phase = phase.ToString().Replace('_', ' ');
+            snap.Phase = phase==NavPhase.CANCEL_LATERAL||phase==NavPhase.ALIGN_PROGRADE ? "ALIGNING" : phase.ToString().Replace('_', ' ');
             snap.Destination = destination;
-            snap.WarningText = warning;
+            snap.WarningText = phase==NavPhase.CANCEL_LATERAL&&string.IsNullOrEmpty(warning)?"Correcting sideways motion":warning;
             snap.BufferMeters = bufferMeters;
             snap.RouteStartDistanceMeters = routeStartDistance;
             if (s != null)
@@ -1087,7 +1122,7 @@ namespace ZeoNav
                 snap.AlignmentErrorDeg = s.LastAlignmentErrorDeg;
                 snap.AngularSpeedDeg = s.LastAngularRateDeg;
             }
-            snap.HudVisible = active || manualFlip || phase == NavPhase.ARRIVED || !string.IsNullOrEmpty(warning);
+            snap.HudVisible = active || manualFlip;
             return snap;
         }
     }
