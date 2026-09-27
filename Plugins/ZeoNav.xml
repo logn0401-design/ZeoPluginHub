@@ -4,14 +4,14 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Nav</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.1.15 — Ship navigation, signal intercept, velocity matching and docking.</Tooltip>
+  <Tooltip>1.1.22 — Ship navigation, signal intercept, velocity matching and docking.</Tooltip>
   <Description>Ship navigation, signal intercept, velocity matching and docking. Native press-to-set menu controls and matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local entries for this plugin before enabling this catalog entry.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>30c14fc5e31b3a41c37831d998c2f9f54d060d6c</Commit>
+  <Commit>b20b1c894bfa35ccec349394af04f65e4c6726f7</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoNav/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.1.15/ZeoNav.dll" Sha256="5ef8c624adac9537f63b7ff060b8e2dffb71d5c65e4b00c993bf18b3b19e0ae7" Reference="true" />
-  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.1.15/ZeoNavOverlay.zip" Sha256="bcaaab3369b6cb24493a66e58ab5ab988c145940b8ad7ac34be91345e6b31707" Extract="true" />
+  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.1.22/ZeoNav.dll" Sha256="6ada5471b0e3b65d52e9ecbc0e1edfc16835807d19445aaa97e7198e59f8b04c" Reference="true" />
+  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.1.22/ZeoNavOverlay.zip" Sha256="71cc8ceb1b29ea66ab088cfc60be976d1a6952430bdcecd764f1015c82929824" Extract="true" />
 </PluginData>
