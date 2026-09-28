@@ -15,7 +15,7 @@ Validated September 27, 2026 against the installed Space Engineers Bin64 and Pul
 | --- | --- |
 | ZeoNav.dll | `67b2f79b1e38e8d615990a8e7ed09705ce1f519be2a600e60bafa707b903f561` |
 | ZeoNavOverlay.zip | `e75834f6468146f30176fbf359e7484a35abb893040e4eaed6f4b70a3ffd590c` |
-| OwendB1-AutoDock-LICENSE.txt | `5ca2920d4f56954100c8f365461aba7b6c6154da49734f7b2703d9275ad49d11` |
+| OwendB1-AutoDock-LICENSE.txt | `1126322e2cc8d165adc4c792eeb195717de2bcc7b39be1ce77959d78e87ef685` |
 
 The overlay ZIP contains only ZeoNavOverlay.exe and ZeoNavOverlay.exe.config at its root. The separate notice asset preserves AutoDock's MIT license. No game libraries, player settings, logs or credentials are distributed.
 
