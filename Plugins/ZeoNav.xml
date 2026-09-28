@@ -8,11 +8,11 @@
   <Description>Ship navigation, signal intercept, velocity matching and docking. Uncapped MAX SIG: 0 = unrestricted; saved limits retained. Smooth departure/arrival limits and arrival-aware ETA. Native settings input fixes with a matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local Nav entries before enabling this catalog entry. Offline validated; live flight/menu testing remains required.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>ade54103fcad1d346c7643aa2dcccf979d51fbac</Commit>
+  <Commit>f399ebba9ca7678f851de379ebfa2006b33b127e</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoNav/</Directory>
   </SourceDirectories>
   <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.1.23/ZeoNav.dll" Sha256="67b2f79b1e38e8d615990a8e7ed09705ce1f519be2a600e60bafa707b903f561" Reference="true" />
   <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.1.23/ZeoNavOverlay.zip" Sha256="e75834f6468146f30176fbf359e7484a35abb893040e4eaed6f4b70a3ffd590c" Extract="true" />
-  <Asset Name="ZeoNavThirdPartyNotice" Path="assets/zeonav/1.1.23/OwendB1-AutoDock-LICENSE.txt" Sha256="5ca2920d4f56954100c8f365461aba7b6c6154da49734f7b2703d9275ad49d11" />
+  <Asset Name="ZeoNavThirdPartyNotice" Path="assets/zeonav/1.1.23/OwendB1-AutoDock-LICENSE.txt" Sha256="1126322e2cc8d165adc4c792eeb195717de2bcc7b39be1ce77959d78e87ef685" />
 </PluginData>
