@@ -32,7 +32,7 @@ namespace ZeoNav
         public string Format(NavConfig c)
         {
             object value = Read(c);
-            return Kind == NavOptionKind.Number ? Convert.ToDouble(value).ToString("F" + Decimals, CultureInfo.InvariantCulture) : Convert.ToString(value);
+            return Kind == NavOptionKind.Number ? Convert.ToDouble(value).ToString(double.IsPositiveInfinity(Max)?"G17":"F" + Decimals, CultureInfo.InvariantCulture) : Convert.ToString(value);
         }
         public object Parse(string text)
         {
@@ -52,7 +52,7 @@ namespace ZeoNav
             if ((!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out number) &&
                  !double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out number)) ||
                  double.IsNaN(number) || double.IsInfinity(number) || number < Min || number > Max)
-                throw new ArgumentException("Enter " + Min + " to " + Max + ".");
+                throw new ArgumentException(double.IsPositiveInfinity(Max)?"Enter a finite number of 0 or higher. 0 = no SIG restriction.":"Enter " + Min + " to " + Max + ".");
             if (Decimals == 0 && number != Math.Round(number)) throw new ArgumentException("Use a whole number.");
             return Math.Round(number, Decimals);
         }
@@ -73,13 +73,13 @@ namespace ZeoNav
             Action<string,string,string,string> boolean = (p,s,k,l) => rows.Add(new NavOption { Page=p,Section=s,Key=k,Label=l,Kind=NavOptionKind.Boolean });
             Action<string,string,string,string,string[]> choice = (p,s,k,l,values) => rows.Add(new NavOption { Page=p,Section=s,Key=k,Label=l,Kind=NavOptionKind.Choice,Choices=values });
             Action<string,string,string,string> action = (p,s,k,l) => rows.Add(new NavOption { Page=p,Section=s,Key=k,Label=l,Kind=NavOptionKind.Action });
-            number("ROUTE","SIGNATURE","MaxDriveSigKm","MAX SIG (km)",5,750,5,0);
+            number("ROUTE","SIGNATURE","MaxDriveSigKm","MAX SIG (km)",0,double.PositiveInfinity,5,0);
             number("ROUTE","DESTINATION","BufferKm","Arrival buffer (km)",0,10,.1,1);
             boolean("ROUTE","QUIET DEPARTURE","DepartureSigEnabled","Use departure SIG limit");
-            number("ROUTE","QUIET DEPARTURE","DepartureSigKm","Departure MAX SIG (km)",5,750,5,0);
+            number("ROUTE","QUIET DEPARTURE","DepartureSigKm","Departure MAX SIG (km)",0,double.PositiveInfinity,5,0);
             number("ROUTE","QUIET DEPARTURE","DepartureDistanceKm","Departure distance (km)",1,1000,10,0);
             boolean("ROUTE","QUIET ARRIVAL","ApproachSigEnabled","Use approach SIG limit");
-            number("ROUTE","QUIET ARRIVAL","ApproachSigKm","Approach MAX SIG (km)",5,750,5,0);
+            number("ROUTE","QUIET ARRIVAL","ApproachSigKm","Approach MAX SIG (km)",0,double.PositiveInfinity,5,0);
             number("ROUTE","QUIET ARRIVAL","ApproachDistanceKm","Approach distance (km)",1,1000,10,0);
             boolean("STYLE","CAPTURE","StreamerMode","Streamer mode (external HUD)");
             action("TRIP HUD","PLACEMENT","@LAYOUT","EDIT HUD POSITION");

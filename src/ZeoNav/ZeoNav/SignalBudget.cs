@@ -16,7 +16,7 @@ namespace ZeoNav
 
         public readonly Dictionary<string, Bucket> Buckets = new Dictionary<string, Bucket>();
         public double SphericalBaseSquared, DirectionalBaseSquared;
-        public double TargetKm;
+        public double TargetKm = 125; // Unconfigured budgets fail closed; unrestricted is explicit zero.
         public double FeedbackScale = 1;
         public bool Ready;
         public const double RangeMargin = .97;
@@ -40,7 +40,9 @@ namespace ZeoNav
 
         public double Limit(int axis, double requested, double[] otherCommands)
         {
-            if (!Ready || !Finite(TargetKm) || TargetKm <= 0 || !Finite(requested)) return 0;
+            if (!Finite(requested) || !Finite(TargetKm) || TargetKm < 0) return 0;
+            if (TargetKm == 0) return Math.Max(0, Math.Min(1, requested));
+            if (!Ready) return 0;
             double ceiling = TargetKm * RangeMargin;
             ceiling *= ceiling;
             if (Math.Max(SphericalBaseSquared, DirectionalBaseSquared) >= ceiling) return 0;

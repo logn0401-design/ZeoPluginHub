@@ -26,6 +26,7 @@ internal static partial class Tests
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int Run()
     {
+        ProfileEtaTests();
         AdaptiveTests();
         CatalogTests();
         DriveGpsTests();
@@ -95,7 +96,7 @@ internal static partial class Tests
         Check("Hauler output retains signature headroom at 750 km", hauler.PredictedSquared(haulerOutput) <= Math.Pow(750 * .97, 2));
         var targetSig = typeof(NavController).GetMethod("TargetSigKm", BindingFlags.NonPublic | BindingFlags.Static);
         Check("Flight controller receives the selected 750 km ceiling", (double)targetSig.Invoke(null, new object[] { new NavConfig { MaxDriveSigKm = 750 } }) == 750);
-        Check("Flight controller caps out-of-range values at 750 km", (double)targetSig.Invoke(null, new object[] { new NavConfig { MaxDriveSigKm = 900 } }) == 750);
+        Check("Flight controller retains limits over 750 km", (double)targetSig.Invoke(null, new object[] { new NavConfig { MaxDriveSigKm = 900 } }) == 900);
 
         var random = new Random(1919); bool property = true;
         for (int trial = 0; trial < 5000; trial++)

@@ -53,7 +53,7 @@ internal static partial class Tests
         Check("Approach uses approach ceiling",ApproachProfile.Effective(c,false,true)==60);
         Check("Overlapping zones use lower ceiling",ApproachProfile.Effective(c,true,true)==40);
         Check("Approach activates at 100 km",ApproachProfile.Activate(c,false,100000,NavPhase.ACCELERATE)&&!ApproachProfile.Activate(c,false,100001,NavPhase.ACCELERATE));
-        Check("Early turn-and-burn activates quiet approach outside radius",ApproachProfile.Activate(c,false,500000,NavPhase.PRE_FLIP));
+        Check("Flip outside arrival radius does not snap to arrival ceiling",!ApproachProfile.Activate(c,false,500000,NavPhase.PRE_FLIP));
         Check("Quiet approach does not flap at zone boundary",ApproachProfile.Activate(c,true,100001,NavPhase.COAST));
         c.ApproachSigKm=500;c.DepartureSigKm=500;
         Check("Profiles never raise cruise maximum",ApproachProfile.Effective(c,true,true)==180);

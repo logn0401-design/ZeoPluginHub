@@ -20,7 +20,7 @@ namespace ZeoNav
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.1.22";
+        public const string Version = "1.1.23";
         private string catalogOverlayPath;
 
         // Pulsar supplies this hash-verified package before Init. Settings remain in dataDir.
@@ -399,8 +399,8 @@ namespace ZeoNav
             if(NavHotkeys.Unique(config,"QuickDockKey")&&KeyNew(config.QuickDockKey)){BeginDock(true);return;}
             if(NavHotkeys.Unique(config,"RefuelKey")&&KeyNew(config.RefuelKey)){if(!targetFlight.Active&&!docking.Active&&!nav.IsControlling)refuel.Toggle();return;}
             if (KeyNew(config.ManualFlipKey)) {targetFlight.Abort("Manual flip selected.");docking.Abort("Manual flip selected.");refuel.Stop("Flight selected.");nav.StartManualFlip();}
-            if (KeyNew(config.SignalUpKey)) { config.MaxDriveSigKm = Math.Min(750, config.MaxDriveSigKm + 5); SaveConfig(); }
-            if (KeyNew(config.SignalDownKey)) { config.MaxDriveSigKm = Math.Max(5, config.MaxDriveSigKm - 5); SaveConfig(); }
+            if (KeyNew(config.SignalUpKey)) { config.MaxDriveSigKm = config.MaxDriveSigKm + 5; SaveConfig(); }
+            if (KeyNew(config.SignalDownKey)) { config.MaxDriveSigKm = Math.Max(0, config.MaxDriveSigKm - 5); SaveConfig(); }
             if (KeyNew(config.StartKey))
             {
                 targetFlight.Abort("Route selected.");docking.Abort("Route selected.");refuel.Stop("Flight selected.");
@@ -638,9 +638,9 @@ namespace ZeoNav
             if(c.ConfigVersion<8){c.QuickDockKey="None";c.RefuelKey="None";c.DockScanMeters=500;c.DockStandOffMeters=50;c.DockApproachMps=1;c.RefuelAfterDock=false;c.ConfigVersion=8;}
             if(c.ConfigVersion<9){c.ApproachSigEnabled=false;c.ApproachSigKm=75;c.ApproachDistanceKm=100;c.ConfigVersion=9;}
             if(c.ConfigVersion<10){c.DepartureSigEnabled=false;c.DepartureSigKm=75;c.DepartureDistanceKm=100;c.ConfigVersion=10;}
-            c.DepartureSigKm=SignalBudget.Finite(c.DepartureSigKm)?ClampD(c.DepartureSigKm,5,750):75;
+            c.DepartureSigKm=ApproachProfile.Normalize(c.DepartureSigKm);
             c.DepartureDistanceKm=SignalBudget.Finite(c.DepartureDistanceKm)?ClampD(c.DepartureDistanceKm,1,1000):100;
-            c.ApproachSigKm=SignalBudget.Finite(c.ApproachSigKm)?ClampD(c.ApproachSigKm,5,750):75;
+            c.ApproachSigKm=ApproachProfile.Normalize(c.ApproachSigKm);
             c.ApproachDistanceKm=SignalBudget.Finite(c.ApproachDistanceKm)?ClampD(c.ApproachDistanceKm,1,1000):100;
             c.QuickDockKey=string.IsNullOrWhiteSpace(c.QuickDockKey)?"None":c.QuickDockKey;
             c.RefuelKey=string.IsNullOrWhiteSpace(c.RefuelKey)?"None":c.RefuelKey;
@@ -648,7 +648,7 @@ namespace ZeoNav
             c.DockStandOffMeters=SignalBudget.Finite(c.DockStandOffMeters)?ClampD(c.DockStandOffMeters,10,500):50;
             c.DockApproachMps=SignalBudget.Finite(c.DockApproachMps)?ClampD(c.DockApproachMps,.2,2):1;
             c.DriveSlider = Math.Max(5, Math.Min(100, c.DriveSlider)); // legacy field retained for old config compatibility
-            c.MaxDriveSigKm = ClampD(c.MaxDriveSigKm <= 0 ? 125.0 : c.MaxDriveSigKm, 5.0, 750.0);
+            c.MaxDriveSigKm = ApproachProfile.Normalize(c.MaxDriveSigKm);
             c.SpeedCapOverride = SignalBudget.Finite(c.SpeedCapOverride) ? ClampD(c.SpeedCapOverride, 0.0, SpeedCapResolver.ServerCeilingMps) : 0;
             c.SpectrumFeedback = true; // direct KM governor requires live Spectrum feedback
             c.InterceptStandOffKm=SignalBudget.Finite(c.InterceptStandOffKm)&&c.InterceptStandOffKm>=2?Math.Min(50,c.InterceptStandOffKm):5;

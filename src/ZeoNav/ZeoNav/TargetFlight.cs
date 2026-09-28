@@ -24,7 +24,7 @@ namespace ZeoNav
         internal bool RequestedIntercept {get;private set;}
         internal string Status="Target flight idle.";
         internal double Distance,RelativeSpeed;
-        internal double Ceiling {get{return Math.Min(config().MaxDriveSigKm,Math.Min(config().ApproachSigEnabled?config().ApproachSigKm:750,config().DepartureSigEnabled?config().DepartureSigKm:750));}}
+        internal double Ceiling {get{return ApproachProfile.Effective(config(),true,true);}}
         internal string Mode {get{return intercept?"INTERCEPT":config().MatchKeep?"KEEP MATCHED":"MATCH ONCE";}}
         internal TargetFlight(Func<ShipContext> s,Func<NavConfig> c,Func<SpectrumAdapter> sp,TargetTracker t,Action<string> logger)
         {ship=s;config=c;spectrum=sp;tracker=t;log=logger;}
@@ -34,7 +34,7 @@ namespace ZeoNav
             if(s==null||!tracker.Confirmed||target==null){Status="Lock a Spectrum signal first.";return false;}
             if(!target.Fresh(tick,now)){Status="Signal locked; waiting for three fresh tracking samples before flight.";return false;}
             if(!s.Motion.Ready||s.HasDockConnection()||s.Gravity.Length()>.05){Status="Requires verified motion, undocked ship and open space.";return false;}
-            if(spectrum()==null||!spectrum().DriveKmReady){Status="Wait for fresh own Spectrum SIG before target flight.";return false;}
+            if(Ceiling>0&&(spectrum()==null||!spectrum().DriveKmReady)){Status="Wait for fresh own Spectrum SIG before target flight.";return false;}
             Distance=Vector3D.Distance(target.Position(tick),s.Position);
             if(Distance<MinimumSeparation(s)){Status="Too close for target-flight preview; use manual RCS.";return false;}
             if(chase&&!InterceptHasRoom(Distance,config().InterceptStandOffKm*1000,MinimumSeparation(s)))
@@ -94,10 +94,10 @@ namespace ZeoNav
             if(Vector3D.Distance(t.Position(tick),s.Position)<MinimumSeparation(s)){Abort("Separation floor reached / manual control required.");return;}
             if(decision==MotionDecision.Hold){s.ApplyDockRotation(Vector3D.Zero);Status="VERIFYING MOTION / THRUST OFF";return;}
             var feed=spectrum();
-            if(feed==null||!feed.DriveKmReady){s.ApplyDockRotation(Vector3D.Zero);Status="WAIT OWN SIG / THRUST OFF";if(clock.Elapsed.TotalSeconds>10)Abort(Status);return;}
-            double ceiling=c.ApproachSigEnabled?Math.Min(c.MaxDriveSigKm,c.ApproachSigKm):c.MaxDriveSigKm;
-            if(c.DepartureSigEnabled)ceiling=Math.Min(ceiling,c.DepartureSigKm);
+            if(Ceiling>0&&(feed==null||!feed.DriveKmReady)){s.ApplyDockRotation(Vector3D.Zero);Status="WAIT OWN SIG / THRUST OFF";if(clock.Elapsed.TotalSeconds>10)Abort(Status);return;}
+            double ceiling=ApproachProfile.Effective(c,true,true);
             // First preview budgets the entire rendezvous at the stricter arrival ceiling.
+            if(budget==null&&ceiling==0){budget=new SignalBudget{TargetKm=0,Ready=true};s.SignatureBudget=budget;topology=s.TopologyRevision;}
             if(budget==null)
             {
                 if(feed.SampleGeneration!=generation){generation=feed.SampleGeneration;quiet=s.ThrustersQuiet?quiet+1:0;}
@@ -107,8 +107,9 @@ namespace ZeoNav
                 s.SignatureBudget=budget;topology=s.TopologyRevision;
                 log("TARGET FLIGHT SIG READY // ceiling="+ceiling.ToString("0.0")+"km / acquiring target heading");
             }
+            if(budget.TargetKm==0&&ceiling>0){budget=null;s.SignatureBudget=null;s.ApplyDockRotation(Vector3D.Zero);quiet=0;return;}
             budget.TargetKm=ceiling;
-            if(feed.DriveKm>ceiling){Abort("Own SIG exceeded target-flight ceiling.");return;}
+            if(ceiling>0&&feed.DriveKm>ceiling){Abort("Own SIG exceeded target-flight ceiling.");return;}
             if(tick%30==0){s.RefreshWorkingState();s.RefreshSignatureTopology();if(topology!=s.TopologyRevision){Abort("Drive topology changed; re-engage target flight.");return;}}
             string capSource;double cap=SpeedCapResolver.Resolve(s.Grid,c.SpeedCapOverride,s.Velocity.Length(),out capSource);
             if(t.Sample.Velocity.Length()>cap){Abort("Target velocity exceeds your speed cap.");return;}

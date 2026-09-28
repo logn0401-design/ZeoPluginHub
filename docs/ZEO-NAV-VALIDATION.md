@@ -1,23 +1,28 @@
-# Zeo Nav v0.1.23 Pulsar catalog validation
+# Zeo Nav 1.1.23 catalog validation
 
-Validated 2026-09-20 against installed Space Engineers assemblies and Pulsar Legacy 2.4.2.
+Validated September 27, 2026 against the installed Space Engineers Bin64 and Pulsar Legacy compiler/parser.
 
-- Runtime, overlay, flight tests and UI tests build in Release/net48 with zero warnings and zero errors. Builds used the existing local .NET Framework reference package cache.
-- 146 isolated flight/control/schema/catalog checks passed, including eight checks for the new overlay asset binding.
-- 1,568 UI assertions passed, including settings persistence, invalid edits, 50k speed input, and rendering fixtures.
-- Installed Pulsar Compiler.exe compiled the small catalog entry point with the packaged runtime reference: success, no diagnostics.
-- 11 integration checks passed using the actual compiled entry point, runtime DLL, extracted overlay ZIP, and installed Pulsar.Shared.dll descriptor parser. These include incomplete-package rejection, settings-path preservation, exact ZIP contents and asset hashes. Init was not invoked.
-- Production source parity with the v0.1.23 one-click baseline: only Plugin.cs and the runtime project differ. Changes are the catalog version suffix, pre-Init overlay asset binding, overlay executable path selection, and the distinct ZeoNav.Runtime assembly name. Navigation, thrust, drive classification, Spectrum, governor, native UI and overlay sources are otherwise byte-identical.
+- Runtime and matching overlay: Release/net48, assembly version 1.1.23.0, zero warnings/errors. Published payload hashes match the tested staged files.
+- 823 isolated flight/control checks passed. Coverage includes unrestricted thrust without own-SIG gating, finite-zone model requirements, smooth profile bounds, retained braking authority, and ETA agreement with an analytic arrival solution.
+- 3,231 UI/settings/rendering assertions passed. Coverage includes zero and large SIG limits, saved-config round trips, retained custom bindings and concurrent settings, close/invalid-edit policy, HUD layout and rendering fixtures.
+- All 65 files in the staged source snapshot match the publish checkout. Loader metadata was then aligned to 1.1.23 and validated with the installed Pulsar compiler: success, no diagnostics.
+- 12 integration checks passed through the installed Pulsar descriptor parser and actual compiled loader. Checks include all three asset hashes, overlay ZIP contents, missing-package rejection and exact runtime-to-overlay binding. Init was not invoked.
+- Existing 1.1.22 and older assets are retained. The current catalog identity and settings path remain unchanged; unrelated plugin entries and assets are not part of this update.
 
-## Runtime assets
+## Published assets
 
 | Asset | SHA-256 |
 | --- | --- |
-| ZeoNav.Runtime.dll | `4f1b3b71f1684756e3fa20e23d0549a8ec201b39cd5154832169a3934b8efdf8` |
-| ZeoNavOverlay.zip | `69f8aea5d2f1c3350a75d7e5f3e909a520083e72c41bc70e2dd0c417dc0250b6` |
+| ZeoNav.dll | `67b2f79b1e38e8d615990a8e7ed09705ce1f519be2a600e60bafa707b903f561` |
+| ZeoNavOverlay.zip | `e75834f6468146f30176fbf359e7484a35abb893040e4eaed6f4b70a3ffd590c` |
+| OwendB1-AutoDock-LICENSE.txt | `5ca2920d4f56954100c8f365461aba7b6c6154da49734f7b2703d9275ad49d11` |
 
-The ZIP contains only ZeoNavOverlay.exe and ZeoNavOverlay.exe.config at its root. No game libraries, live player settings, logs or credentials are included in the Nav catalog payload.
+The overlay ZIP contains only ZeoNavOverlay.exe and ZeoNavOverlay.exe.config at its root. The separate notice asset preserves AutoDock's MIT license. No game libraries, player settings, logs or credentials are distributed.
 
-## Remaining live validation
+## Live validation boundary
 
-A fresh catalog installation, overlay launch and real flight on another player's computer are not covered by these offline checks. Test with only one Nav entry enabled, confirm the PULSAR version in the Nav log, and verify GO, STOP, settings close, own-ship SIG feedback, forward thrust and flip-and-burn in the intended server environment. Existing v0.1.23 feedback does not prove that every server's wobble has been eliminated.
+Publication does not update a running game. Refresh sources and fully restart through Pulsar; the next Nav startup log should identify 1.1.23. This release has not yet demonstrated the menu fix, SIG transitions or ETA accuracy in-game or on a multiplayer server.
+
+Prefer creative for the first check: Abort, turn departure OFF, apply a limit and reopen the menu; then test 0 with zone limits OFF and finite departure/arrival profiles with a buffer. Check actual own signature against the displayed blended ceiling and observe ETA through acceleration, flip, braking and terminal settle. Only one Nav entry should be enabled.
+
+Existing saved limits are retained. A fresh installation defaults to 0/unrestricted. A positive enabled departure/arrival limit still applies to unrestricted cruise and requires fresh Spectrum telemetry. Flight recovery or unavailable authority yields an unknown ETA rather than a fabricated countdown.

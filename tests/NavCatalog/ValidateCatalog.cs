@@ -10,6 +10,7 @@ using System.Xml.Serialization;
 
 internal static class ValidateCatalog
 {
+    private static int checkedCount;
     // Arguments: repository, game Bin64, Pulsar Libraries/Legacy, compiled loader DLL, scratch directory.
     private static int Main(string[] args)
     {
@@ -60,8 +61,8 @@ internal static class ValidateCatalog
         Require((string)navType.GetField("catalogOverlayPath", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav) == Path.Combine(overlay, "ZeoNavOverlay.exe"), "Actual runtime binds the extracted overlay");
         Require((string)navType.GetField("dataDir", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav) == Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Pulsar", "ZeoNav"), "Persistent settings path preserved");
         Require(navType.GetField("rx", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav) == null, "Offline validation does not initialize network or flight");
-        Console.WriteLine("PASS: 11 catalog integration checks; no game, overlay or profiles started/modified.");
+        Console.WriteLine("PASS: " + checkedCount + " catalog integration checks; no game, overlay or profiles started/modified.");
         return 0;
     }
-    private static void Require(bool value, string label) { if (!value) throw new Exception(label); Console.WriteLine("PASS | " + label); }
+    private static void Require(bool value, string label) { if (!value) throw new Exception(label); checkedCount++; Console.WriteLine("PASS | " + label); }
 }

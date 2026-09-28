@@ -103,7 +103,7 @@ namespace ZeoNav
                 if(_gpsList!=null && !GpsSearch.SameList(_gpsSource,s.Gps)) RefreshGpsChoices();
                 if(_ship!=null) { _ship.Text=Short("MAIN "+s.ForwardWorkingMainDriveCount+"/"+s.ForwardMainDriveCount+" READY // "+s.Phase+" // "+s.Ship,74); _ship.SetToolTip(s.DriveScanSummary??""); }
                 if(_trip!=null) { _trip.SetToolTip("Velocity: "+s.VelocitySource+"\nPhysics API: "+s.ApiSpeedMps.ToString("0.0")+" m/s; world measurement: "+s.MeasuredSpeedMps.ToString("0.0")+" m/s"); _trip.Text="SPD "+s.SpeedMps.ToString("0")+" m/s  //  ETA "+(s.EtaSeconds>=0 ? TimeSpan.FromSeconds(s.EtaSeconds).ToString(@"hh\:mm\:ss") : "WAIT"); }
-                if(_signal!=null) { _signal.Text=Short(s.SpectrumKmReady ? "OWN SIG "+s.SpectrumDriveKm.ToString("0.0")+" / "+s.MaxDriveSigKm.ToString("0")+" km" : "OWN SIG WAIT",42); _signal.SetToolTip((s.WarningText??"")+"\n"+s.SignalGovernorState+"\n"+s.SpectrumKmSource+"\nSpherical strong/weak: "+s.SphericalStrongKm.ToString("0.0")+" / "+s.SphericalWeakKm.ToString("0.0")+" km\nDirectional strong/weak: "+s.DirectionalStrongKm.ToString("0.0")+" / "+s.DirectionalWeakKm.ToString("0.0")+" km"); }
+                if(_signal!=null) { _signal.Text=Short(s.SpectrumKmReady ? "OWN SIG "+s.SpectrumDriveKm.ToString("0.0")+" / "+(s.MaxDriveSigKm==0?"NO LIMIT":s.MaxDriveSigKm.ToString("0")+" km") : "OWN SIG WAIT",42); _signal.SetToolTip((s.WarningText??"")+"\n"+s.SignalGovernorState+"\n"+s.SpectrumKmSource+"\nSpherical strong/weak: "+s.SphericalStrongKm.ToString("0.0")+" / "+s.SphericalWeakKm.ToString("0.0")+" km\nDirectional strong/weak: "+s.DirectionalStrongKm.ToString("0.0")+" / "+s.DirectionalWeakKm.ToString("0.0")+" km"); }
                 if(_approach!=null)
                 {
                     _approach.Text="DIST "+(s.DistanceMeters/1000).ToString("0.0")+" km  //  FLIP "+(s.FlipInSeconds>=0 ? s.FlipInSeconds.ToString("0")+" s" : "--")+"  //  STOP "+(s.StopDistanceMeters/1000).ToString("0.0")+" km  //  CMD "+(s.ForwardCommandRatio*100).ToString("0")+"%";
@@ -131,7 +131,10 @@ namespace ZeoNav
             _building=true;
             try
             {
-                _model.Reload(); FocusedControl=null; Controls.Clear(); _editors.Clear(); _ship=_trip=_signal=_approach=null;
+                _model.Reload(); FocusedControl=null;
+                m_lastHandlingControl=null;m_comboboxHandlingNow=null;m_gridDragAndDropHandlingNow=null;
+                foreach(var old in Controls) { old.Visible=false; old.Enabled=false; }
+                Controls.Clear(); _editors.Clear(); _ship=_trip=_signal=_approach=null;
                 _gpsList=null; _gpsArrow=null; _gpsSearch=null;
                 _dockStatus=_refuelStatus=null;
                 AddCaption("ZEO NAV // FLIGHT CONTROL",new Vector4(.82f,.91f,.94f,1),new Vector2(0,-.346f),.82f);
@@ -145,7 +148,7 @@ namespace ZeoNav
                 var rows=NavUiCatalog.Options.Where(o=>o.Page==NavUiCatalog.Pages[_page]).ToArray();
                 int views=Math.Max(1,(rows.Length+RowsPerView-1)/RowsPerView);
                 int view=LastViews[_page]=Math.Max(0,Math.Min(views-1,LastViews[_page]));
-                Label(-.354f,-.231f,NavUiCatalog.Pages[_page]+(_page==0 ? "  //  v1.1.21 TEST" : "  /  "+(view+1)+" OF "+views),.68f);
+                Label(-.354f,-.231f,NavUiCatalog.Pages[_page]+(_page==0 ? "  //  v"+Plugin.Version : "  /  "+(view+1)+" OF "+views),.68f);
                 if(_page==0)
                 {
                     BuildGps();
@@ -193,8 +196,10 @@ namespace ZeoNav
             bool enabled=(bool)toggle.Read(_model.Current);
             MyGuiControlButton button=null;
             button=Button(x+.272f,.009f,.145f,.035f,enabled?"[X] ON":"OFF",delegate {
-                if(!CommitEditors())return;
-                if(Apply(toggle,!enabled)){enabled=!enabled;button.Text=enabled?"[X] ON":"OFF";button.Selected=enabled;}
+                _model.Reload();
+                bool next=!(bool)toggle.Read(_model.Current);
+                if(Apply(toggle,next)){enabled=next;button.Text=enabled?"[X] ON":"OFF";button.Selected=enabled;
+                    host.Log("Native Nav toggle // "+toggle.Key+"="+enabled);}
             },.48f);
             button.Selected=enabled;button.SetToolTip(Help(toggle));
             string[] suffixes={"SigKm","DistanceKm"};
@@ -203,13 +208,13 @@ namespace ZeoNav
                 var option=NavUiCatalog.Options.Single(o=>o.Key==prefix+suffixes[i]);
                 float y=.060f+i*.050f;Label(x,y,i==0?"MAX SIG (km)":"DISTANCE (km)",.46f);
                 string saved=option.Format(_model.Current);
-                var box=new ZeoUi.NativeRowTextbox(new Vector2(x+.272f,y),saved,16,null,.59f);
+                var box=new ZeoUi.NativeRowTextbox(new Vector2(x+.272f,y),saved,32,null,.59f);
                 box.Size=new Vector2(.145f,.037f);box.SetToolTip(option.Label+Help(option));
                 Controls.Add(box);
                 Func<bool> commit=delegate {
                     if(box.Text==saved)return true;
                     try{if(!Apply(option,option.Parse(box.Text)))return false;saved=option.Format(_model.Current);box.Text=saved;return true;}
-                    catch(Exception ex){Message(option.Label+": "+ex.Message);FocusedControl=box;return false;}
+                    catch(Exception ex){Message(option.Label+": "+ex.Message);host.Log("Native Nav invalid edit // "+option.Key+" // "+ex.Message);FocusedControl=box;return false;}
                 };
                 _editors.Add(commit);box.EnterPressed+=delegate{if(commit())FocusedControl=null;};
             }
@@ -405,7 +410,7 @@ namespace ZeoNav
                 MyGuiControlButton on=null,off=null;
                 var state=Label(0.07392f,y,value ? "ON" : "OFF",0.65f); state.Visible=false;
                 Action<bool> choose=delegate(bool selected) {
-                    if(!CommitEditors() || !Apply(option,selected)) return;
+                    if(!Apply(option,selected)) return;
                     SetToggleState(on,off,state,selected);
                     if(option.Key=="StreamerMode" || option.Key=="CaptureSafeHud" || option.Key=="CaptureSafeMenu") _rebuild=true;
                 };
@@ -459,7 +464,7 @@ namespace ZeoNav
             if(option.Key=="TargetAimHoldKey") return "\nHold this key to select a Spectrum signal. Left click locks; right click aborts. Standalone Ctrl, Alt and Shift keys can be captured.";
             if(option.Key=="DampenerEntryMaxMps") return "\nLegacy saved threshold. Adaptive flight now uses controlled braking and reserves dampeners for the final stop; changing this does not enable early coasting.";
             if(option.Key=="TerminalDampeners") return "\nNative dampeners assist only the final stop when full-bank MAX SIG is safe. Terminal positioning still uses controlled thrust.";
-            if(option.Kind==NavOptionKind.Number) return "\nRange: "+option.Min+" to "+option.Max+". Step: "+option.Step;
+            if(option.Kind==NavOptionKind.Number) return double.IsPositiveInfinity(option.Max)?"\n0 = no SIG restriction. No upper limit. Departure/arrival limits blend over distance.":"\nRange: "+option.Min+" to "+option.Max+". Step: "+option.Step;
             if(option.Key=="PredictTrackMotion") return "\nPredicts motion between sensor updates. Does not enable overlay marker smoothing.";
             if(option.Key=="CaptureSafeMenu") return "\nApplies to FULL / LEGACY SETTINGS only. Native game screens remain capturable.";
             return "";
@@ -482,12 +487,12 @@ namespace ZeoNav
                     saved=option.Format(_model.Current); edit.Text=saved;
                     return true;
                 }
-                catch(Exception ex) { Message(option.Label+": "+ex.Message); FocusedControl=edit; return false; }
+                catch(Exception ex) { Message(option.Label+": "+ex.Message); host.Log("Native Nav invalid edit // "+option.Key+" // "+ex.Message); FocusedControl=edit; return false; }
             };
             _editors.Add(commit);
-            edit.EnterPressed+=delegate { if(CommitEditors()) _rebuild=true; };
+            edit.EnterPressed+=delegate { commit(); };
             edit.TextChanged+=delegate { if(!_building && edit.Text!=saved) Message("Editing "+option.Label+". ENTER or APPLY saves."); };
-            Button(0.346f,y,0.060f,0.041f,"APPLY",delegate { if(CommitEditors()) _rebuild=true; },0.49f);
+            Button(0.346f,y,0.060f,0.041f,"APPLY",delegate { commit(); },0.49f);
             if(color)
             {
                 var pick=Button(0.282f,y,0.058f,0.041f,"PICK",delegate {
@@ -554,7 +559,10 @@ namespace ZeoNav
             var button=new MyGuiControlButton(new Vector2(x,y),MyGuiControlButtonStyleEnum.Rectangular,new Vector2(width,Math.Max(height,ZeoUi.NativeRowTextbox.RowHeight)),null,
                 MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,null,new StringBuilder(text),scale,
                 MyGuiDrawAlignEnum.HORISONTAL_CENTER_AND_VERTICAL_CENTER,MyGuiControlHighlightType.WHEN_CURSOR_OVER,
-                delegate(MyGuiControlButton _) { action(); });
+                delegate(MyGuiControlButton _) {
+                    try{host.Log("Native Nav click // "+text);action();}
+                    catch(Exception ex){Message("Action failed: "+ex.Message);host.Log("Native Nav action failed // "+text+" // "+ex);}
+                });
             Controls.Add(button); return button;
         }
 

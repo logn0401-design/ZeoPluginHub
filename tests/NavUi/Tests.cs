@@ -40,7 +40,7 @@ internal static class Tests
             var field=typeof(NavConfig).GetField(row.Key);
             Check(field!=null,"valid target "+row.Key);
             var values=new List<object>();
-            if(row.Kind==NavOptionKind.Number) { values.Add(row.Parse(row.Min.ToString(CultureInfo.InvariantCulture))); values.Add(row.Parse(row.Max.ToString(CultureInfo.InvariantCulture))); }
+            if(row.Kind==NavOptionKind.Number) { values.Add(row.Parse(row.Min.ToString(CultureInfo.InvariantCulture))); values.Add(row.Parse((double.IsPositiveInfinity(row.Max)?100000:row.Max).ToString(CultureInfo.InvariantCulture))); }
             else if(row.Kind==NavOptionKind.Boolean) { values.Add(false); values.Add(true); }
             else if(row.Kind==NavOptionKind.Color) values.Add(row.Parse("#a1b2c3"));
             else foreach(string value in row.Choices) values.Add(row.Parse(value));
@@ -56,15 +56,19 @@ internal static class Tests
         }
         Group("All 64 stored fields accounted for; all editable controls, choices and range endpoints round-trip");
         var sigOption=catalog.Single(o=>o.Key=="MaxDriveSigKm");
-        Check(sigOption.Min==5 && sigOption.Max==750,"MAX SIG selector exposes 5 to 750 km");
+        Check(sigOption.Min==0 && double.IsPositiveInfinity(sigOption.Max),"MAX SIG selector permits zero and has no upper ceiling");
         store.Apply(NavUiCatalog.Changes(sigOption,sigOption.Parse("750")));
         Check(store.Read().MaxDriveSigKm==750 && JsonIo.Load<NavConfig>(path).MaxDriveSigKm==750,"750 km survives saved config reload");
-        bool sigRejected=false; try { sigOption.Parse("751"); } catch { sigRejected=true; }
-        Check(sigRejected,"native menu rejects values above 750 km");
-        Check(ConfigRules.Clamp(new NavConfig {ConfigVersion=7,MaxDriveSigKm=900}).MaxDriveSigKm==750,"oversized stored MAX SIG clamps to 750 km");
+        bool sigRejected=false; try { sigOption.Parse("NaN"); } catch { sigRejected=true; }
+        Check(sigRejected,"native menu rejects non-finite SIG input");
+        Check(ConfigRules.Clamp(new NavConfig {ConfigVersion=7,MaxDriveSigKm=900}).MaxDriveSigKm==900,"stored limits over 750 remain unchanged");
         Check(ConfigRules.Clamp(new NavConfig {ConfigVersion=7,MaxDriveSigKm=125}).MaxDriveSigKm==125,"existing selection stays unchanged");
         Check(ConfigRules.Clamp(new NavConfig {ConfigVersion=4,DriveSlider=100}).MaxDriveSigKm==490,"historical slider migration preserves original intent");
-        Group("750 km MAX SIG persistence, bounds and migration");
+        store.Apply(NavUiCatalog.Changes(sigOption,sigOption.Parse("25000")));
+        Check(store.Read().MaxDriveSigKm==25000,"large SIG limit survives saved reload");
+        store.Apply(NavUiCatalog.Changes(sigOption,sigOption.Parse("0")));
+        Check(store.Read().MaxDriveSigKm==0 && new NavConfig().MaxDriveSigKm==0,"zero is preserved and is the fresh default");
+        Group("Uncapped MAX SIG persistence, unlimited default and migration");
         foreach(string key in new[]{"ApproachSigEnabled","ApproachSigKm","ApproachDistanceKm","DepartureSigEnabled","DepartureSigKm","DepartureDistanceKm"})
             Check(catalog.Single(o=>o.Key==key).Page=="ROUTE","zone control belongs on main route screen: "+key);
         Check(NavUiCatalog.Pages.Contains("DOCKING"),"docking has its own native tab");

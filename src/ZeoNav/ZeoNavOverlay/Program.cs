@@ -809,7 +809,7 @@ namespace ZeoNavOverlay
                 : "SPD " + Speed(s.SpeedMps) + "   //   CAP NOT RESOLVED";
             DrawText(g, speedLine, p.Text, x, y, 13, c.SpeedScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable));
             y += speedRow;
-            string sig = s.SpectrumKmReady ? "SIG " + SigKmText(s.SpectrumDriveKm) + " / MAX " + SigKmText(s.MaxDriveSigKm) : "SIG KM WAIT / MAX " + SigKmText(s.MaxDriveSigKm);
+            string sig = s.SpectrumKmReady ? "SIG " + SigKmText(s.SpectrumDriveKm) + " / MAX " + SigLimitText(s.MaxDriveSigKm) : "SIG KM WAIT / MAX " + SigLimitText(s.MaxDriveSigKm);
             DrawText(g, sig, p.Accent, x, y, 12, c.SignalScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.66f));
             DrawTextRight(g, "THRUST " + (s.ForwardCommandRatio * 100).ToString("0") + "%", p.Secondary, x + usable, y, 11, c.SignalScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
             y += signalRow;
@@ -1330,6 +1330,7 @@ namespace ZeoNavOverlay
         private static string Safe(string s, string d) { return string.IsNullOrWhiteSpace(s) ? d : s; }
         private static string Dist(double m) { if (m >= 1000000) return (m / 1000000).ToString("0.00") + "Mm"; if (m >= 1000) return (m / 1000).ToString("0.0") + "km"; return m.ToString("0") + "m"; }
         private static string Speed(double v) { return v.ToString(v >= 1000 ? "0" : "0.0") + " M/S"; }
+        private static string SigLimitText(double km) {return km==0?"NO LIMIT":SigKmText(km);}
         private static string SigKmText(double km) { if (km < 0) return "-- KM"; return km.ToString(km >= 100 ? "0" : "0.0") + " KM"; }
         private static string Time(double sec) { if (double.IsNaN(sec) || double.IsInfinity(sec) || sec < 0) return "--:--"; int s = (int)Math.Round(sec); return (s / 3600 > 0 ? (s / 3600).ToString("00") + ":" : "") + ((s / 60) % 60).ToString("00") + ":" + (s % 60).ToString("00"); }
     }
@@ -1348,8 +1349,9 @@ namespace ZeoNavOverlay
         private int pageIndex;
 
         private ComboBox gpsBox;
-        private FlatSlider bufferSlider, driveSlider;
-        private Label bufferValue, driveValue, driveCompare, trip, spectrum, shipStatus, capStatus, driveScanStatus, zeoSyncStatus;
+        private FlatSlider bufferSlider;
+        private TextBox driveLimit;
+        private Label bufferValue, driveCompare, trip, spectrum, shipStatus, capStatus, driveScanStatus, zeoSyncStatus;
         private Button streamerButton;
         private string captureKeyField;
         private readonly Dictionary<string, Button> bindButtons = new Dictionary<string, Button>();
@@ -1450,11 +1452,7 @@ namespace ZeoNavOverlay
                     bufferSlider.Value = Math.Max(bufferSlider.Minimum, Math.Min(bufferSlider.Maximum, (int)Math.Round(cfg.BufferKm * 10.0)));
                     if (bufferValue != null) bufferValue.Text = cfg.BufferKm.ToString("0.0") + " km";
                 }
-                if (driveSlider != null)
-                {
-                    driveSlider.Value = Math.Max(driveSlider.Minimum, Math.Min(driveSlider.Maximum, (int)Math.Round(cfg.MaxDriveSigKm)));
-                    if (driveValue != null) driveValue.Text = SigKmText(cfg.MaxDriveSigKm);
-                }
+                if(driveLimit!=null&&!driveLimit.Focused)driveLimit.Text=cfg.MaxDriveSigKm.ToString("G17",System.Globalization.CultureInfo.InvariantCulture);
                 UpdateLiveText();
             }
             finally { applying = false; }
@@ -1496,8 +1494,8 @@ namespace ZeoNavOverlay
                 body.SuspendLayout();
                 body.Controls.Clear();
                 bindButtons.Clear();
-                gpsBox = null; bufferSlider = null; driveSlider = null;
-                bufferValue = null; driveValue = null; driveCompare = null; trip = null; spectrum = null; shipStatus = null; capStatus = null; driveScanStatus = null; zeoSyncStatus = null; streamerButton = null;
+                gpsBox = null; bufferSlider = null; driveLimit = null;
+                bufferValue = null; driveCompare = null; trip = null; spectrum = null; shipStatus = null; capStatus = null; driveScanStatus = null; zeoSyncStatus = null; streamerButton = null;
 
                 ApplyThemeToForm();
                 AddTitle("ZEO NAV // ROUTE CONTROL", "v0.1.23 // LEGACY SETTINGS");
@@ -1549,12 +1547,8 @@ namespace ZeoNavOverlay
             }, delegate(int v) { return (v / 10.0).ToString("0.0") + " km"; }, out bufferValue);
 
             AddSection("MAX OWN-SHIP SIGNATURE");
-            AddInfo("Choose MAX SIG and press GO. Zeo Nav budgets thrust up to 100% for a fast route and a stop at your buffer. MAX SIG covers the farthest of all four Spectrum own-ship ranges. It reserves 3% range headroom, measures idle signature before departure, and cuts thrust if telemetry is stale or the measured limit is exceeded.");
-            driveSlider = AddSlider("MAX SIG", 5, 750, (int)Math.Round(cfg.MaxDriveSigKm), delegate(int v)
-            {
-                if (driveValue != null) driveValue.Text = SigKmText(v);
-                Set("MaxDriveSigKm", v);
-            }, delegate(int v) { return SigKmText(v); }, out driveValue);
+            AddInfo("Choose MAX SIG and press GO. Zeo Nav budgets thrust up to 100% for a fast route and a stop at your buffer. MAX SIG covers the farthest of all four Spectrum own-ship ranges. 0 means no SIG restriction. Positive limits reserve 3% range headroom, require fresh own-ship telemetry, and cut thrust if the limit is exceeded. Quiet departure and arrival blend their limits over the selected distances.");
+            driveLimit=AddSigLimit("MAX SIG (km, 0 = no limit)",cfg.MaxDriveSigKm,v=>Set("MaxDriveSigKm",v));
             driveCompare = AddLiveLabel("MAX SIG -- KM   // ACTUAL -- KM   // THR --%   // ETA --:--", true);
             spectrum = AddLiveLabel("Spectrum KM source: waiting", false);
             capStatus = AddLiveLabel("Speed cap: waiting", false);
@@ -1751,7 +1745,7 @@ namespace ZeoNavOverlay
             if (driveCompare != null)
             {
                 string actual = snapshot.SpectrumKmReady ? SigKmText(snapshot.SpectrumDriveKm) : "WAIT";
-                driveCompare.Text = "MAX SIG " + SigKmText(snapshot.MaxDriveSigKm) + "   // ACTUAL " + actual +
+                driveCompare.Text = "MAX SIG " + SigLimitText(snapshot.MaxDriveSigKm) + "   // ACTUAL " + actual +
                     "   // CMD " + (snapshot.ForwardCommandRatio * 100.0).ToString("0.0") + "%   // ETA " + Time(snapshot.EtaSeconds) +
                     "   // " + (snapshot.SignalGovernorState ?? "IDLE");
             }
@@ -1759,7 +1753,7 @@ namespace ZeoNavOverlay
                 streamerButton.Text = cfg.StreamerMode ? "STREAMER MODE: ON" : "STREAMER MODE: OFF";
             if (spectrum != null)
                 spectrum.Text = snapshot.SpectrumKmReady
-                    ? "Own-ship signature " + SigKmText(snapshot.SpectrumDriveKm) + " / MAX " + SigKmText(snapshot.MaxDriveSigKm) +
+                    ? "Own-ship signature " + SigKmText(snapshot.SpectrumDriveKm) + " / MAX " + SigLimitText(snapshot.MaxDriveSigKm) +
                       "   // available thrust " + (snapshot.DriveRatio * 100.0).ToString("0.00") + "%   // KM source " + (snapshot.SpectrumKmSource ?? "UNKNOWN") +
                       "   // sphere S/W " + SigKmText(snapshot.SphericalStrongKm) + " / " + SigKmText(snapshot.SphericalWeakKm) + "   // directional S/W " + SigKmText(snapshot.DirectionalStrongKm) + " / " + SigKmText(snapshot.DirectionalWeakKm)
                     : (snapshot.SpectrumReady
@@ -2053,6 +2047,22 @@ namespace ZeoNavOverlay
             p.Controls.Add(c); body.Controls.Add(p); return c;
         }
 
+        private TextBox AddSigLimit(string label,double value,Action<double> changed)
+        {
+            var p=NewPanel(46);
+            p.Controls.Add(new Label {Text=label,Tag="TEXT",Location=new Point(10,8),Size=new Size(340,28),ForeColor=MenuText()});
+            var edit=new TextBox {Text=value.ToString("G17",System.Globalization.CultureInfo.InvariantCulture),Location=new Point(360,8),Size=new Size(155,28),MaxLength=32};
+            Action save=delegate {
+                double number;
+                if(!double.TryParse(edit.Text,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out number)||double.IsNaN(number)||double.IsInfinity(number)||number<0)
+                {edit.BackColor=Color.FromArgb(100,40,35);return;}
+                edit.BackColor=Color.FromArgb(34,37,41);changed(number);
+            };
+            var apply=new Button {Text="APPLY",Location=new Point(520,7),Size=new Size(65,28)};
+            apply.Click+=delegate {save();};edit.KeyDown+=delegate(object sender,KeyEventArgs e){if(e.KeyCode==Keys.Enter){save();e.SuppressKeyPress=true;}};
+            p.Controls.Add(edit);p.Controls.Add(apply);body.Controls.Add(p);return edit;
+        }
+
         private void AddNumber(string label, decimal value, decimal min, decimal max, decimal inc, Action<decimal> changed, int decimals = 0)
         {
             var p = NewPanel(46);
@@ -2323,6 +2333,7 @@ namespace ZeoNavOverlay
         private static int Clamp(int v, int min, int max) { return Math.Max(min, Math.Min(max, v)); }
         private static string Dist(double m) { if (m >= 1000000) return (m / 1000000).ToString("0.00") + " Mm"; if (m >= 1000) return (m / 1000).ToString("0.0") + " km"; return m.ToString("0") + " m"; }
         private static string Speed(double v) { return v.ToString(v >= 1000 ? "0" : "0.0") + " M/S"; }
+        private static string SigLimitText(double km) {return km==0?"NO LIMIT":SigKmText(km);}
         private static string SigKmText(double km) { if (km < 0) return "-- KM"; return km.ToString(km >= 100 ? "0" : "0.0") + " KM"; }
         private static string Time(double sec) { if (double.IsNaN(sec) || double.IsInfinity(sec) || sec < 0) return "--:--"; int x = (int)Math.Round(sec); return (x / 3600 > 0 ? (x / 3600).ToString("00") + ":" : "") + ((x / 60) % 60).ToString("00") + ":" + (x % 60).ToString("00"); }
         private static Color SafeColor(string hex, Color fallback) { try { return ColorTranslator.FromHtml(hex); } catch { return fallback; } }

@@ -45,7 +45,7 @@ namespace ZeoNav
         private double lastDistance = double.MaxValue;
         private int distanceGrowingTicks;
         private double effectiveDriveRatio;
-        private double eta, accelTime, coastTime, flipBurnTime;
+        private double eta, accelTime, coastTime, flipBurnTime, plannedEtaPeak;
         private double fullDriveEta = -1, timeSavedAtFull;
         private double stopDistance, flipAt, flipIn;
         private double commandSpeed;
@@ -102,7 +102,7 @@ namespace ZeoNav
             if (changed && !active && !manualFlip)
             {
                 phase = NavPhase.DISARMED;
-                warning = "";
+                warning = ""; nextArrivalEta=DateTime.MinValue;
             }
         }
 
@@ -352,7 +352,7 @@ namespace ZeoNav
             // Toward-target gravity helps acceleration but hurts the later retro burn.
             // Reserve braking authority under the arrival ceiling from departure.
             double forwardAccel = Math.Max(.01, thrusterAccel + gravityAlongRoute);
-            double plannedBrakeRatio=ApproachProfile.Ratio(signalBudget,Math.Min(ActiveSigKm(c),ApproachProfile.Arrival(c)));
+            double plannedBrakeRatio=ApproachProfile.Ratio(signalBudget,ApproachProfile.Restrict(ActiveSigKm(c),ApproachProfile.Arrival(c)));
             double availableBrake=fullThrusterAccel*plannedBrakeRatio-gravityAlongRoute;
             if(availableBrake<.01){Abort("APPROACH SIG TOO LOW FOR BRAKING / RAISE LIMIT");return;}
             double brakeAccel=availableBrake*.8; // reserve 20% corrective authority
@@ -376,7 +376,7 @@ namespace ZeoNav
             }
             if (SpeedCapIsReliable())
             {
-                CalculateEta(Math.Max(0, dist), Math.Max(0, closing), commandSpeed, forwardAccel, brakeAccel, flipAllowance);
+                UpdateArrivalEta(s,c,dist,closing,speed,dir,fullThrusterAccel,gravityAlongRoute,brakeAccel,flipAllowance,false);
                 // v0.1.14 has one operating model: the user's MAX SIG ceiling. Do not
                 // advertise a separate 100% mode/comparison.
                 fullDriveEta = -1;
@@ -597,7 +597,7 @@ namespace ZeoNav
         }
 
         private bool CanAssistDampeners()
-        { return signalBudget!=null&&signalBudget.Ready&&signalBudget.PredictedSquared(new double[]{1,1,1,1,1,1})<=Math.Pow(signalBudget.TargetKm*SignalBudget.RangeMargin,2); }
+        { return signalBudget!=null&&signalBudget.Ready&&(signalBudget.TargetKm==0||signalBudget.PredictedSquared(new double[]{1,1,1,1,1,1})<=Math.Pow(signalBudget.TargetKm*SignalBudget.RangeMargin,2)); }
         internal static double TerminalEnvelope(double arrivalRadius)
         { return Math.Max(1000,arrivalRadius*20); }
         internal static double TerminalEnvelope(double arrivalRadius,double configured)
@@ -708,7 +708,7 @@ namespace ZeoNav
             signalGovernorSampleGeneration = getSpectrum() == null ? -1 : getSpectrum().SampleGeneration;
             signalBudget = null; budgetTopology = -1; quietSamples = 0; baselineReady = false; signalTrip = false;
             signalWaitStarted = -1; lastSignalLog = -10;
-            routeClock.Restart();
+            routeClock.Restart(); nextArrivalEta=DateTime.MinValue;
             signalGovernorState = "MEASURING OWN IDLE SIGNATURE";
             log("SIG GOV ARM // max=" + TargetSigKm(c).ToString("0.0") + " KM // model + fresh own summary / no acquisition burn");
         }
@@ -718,12 +718,19 @@ namespace ZeoNav
             return ApproachProfile.Cruise(c);
         }
         private double ActiveSigKm(NavConfig c)
-        { return ApproachProfile.Effective(c,active&&!departureCleared,approachActive); }
+        {
+            var ship=getShip();
+            if(!active||ship==null)return ApproachProfile.Cruise(c);
+            return ApproachProfile.At(c,departureCleared?c.DepartureDistanceKm*1000:Vector3D.Distance(ship.Position,routeStart),
+                Vector3D.Distance(ship.Position,gpsTarget),bufferMeters,ApproachProfile.FullRange(signalBudget));
+        }
 
 
         private double EstimateSignalRatio(NavConfig c, ShipContext s)
         {
-            if (signalBudget == null || !signalBudget.Ready || s == null || s.Grid.EntityId != signalGovernorGridId) return 0;
+            if(s==null)return 0;
+            if(!ApproachProfile.NeedsModel(c))return 1;
+            if (signalBudget == null || !signalBudget.Ready || s.Grid.EntityId != signalGovernorGridId) return 0;
             signalBudget.TargetKm = ActiveSigKm(c);
             return signalBudget.Limit(0, 1, new double[6]);
         }
@@ -762,11 +769,19 @@ namespace ZeoNav
             SpectrumAdapter sp = getSpectrum();
             if (s == null || c == null) return 0;
             s.RefreshSignatureTopology();
-            if (!active) return EstimateSignalRatio(c, s);
-            if (s.Grid.EntityId != signalGovernorGridId) PrepareSignalGovernor(s, c);
+            if (!active && ApproachProfile.NeedsModel(c)) return EstimateSignalRatio(c, s);
+            if (active && s.Grid.EntityId != signalGovernorGridId) PrepareSignalGovernor(s, c);
+            if(!ApproachProfile.NeedsModel(c))
+            {
+                if(signalBudget==null)signalBudget=new SignalBudget();
+                signalBudget.TargetKm=0;signalBudget.Ready=true;s.SignatureBudget=signalBudget;
+                budgetTopology=-1;baselineReady=false;signalTrip=false;
+                signalGovernorState="NO SIG LIMIT / FULL THRUST AVAILABLE";return 1;
+            }
             if (signalBudget != null) signalBudget.Ready = false;
             if (sp == null || !c.SpectrumFeedback || !sp.DriveKmReady)
             {
+                if(signalBudget!=null)signalBudget.TargetKm=ActiveSigKm(c);
                 signalGovernorState = "WAIT FRESH OWN SIG / THRUST ZERO";
                 return 0;
             }
@@ -792,7 +807,7 @@ namespace ZeoNav
             }
             double previousCeiling=signalBudget.TargetKm;
             signalBudget.TargetKm = ActiveSigKm(c);
-            if(previousCeiling>signalBudget.TargetKm&&sp.DriveKm>=signalBudget.TargetKm*SignalBudget.RangeMargin)
+            if(signalBudget.TargetKm>0&&(previousCeiling==0||previousCeiling>signalBudget.TargetKm)&&sp.DriveKm>=signalBudget.TargetKm*SignalBudget.RangeMargin)
                 signalTrip=true; // An old cruise packet is expected after lowering the ceiling.
             if (newSample)
             {
@@ -810,14 +825,14 @@ namespace ZeoNav
                     }
                 }
                 else quietSamples = 0;
-                if (sp.DriveKm > signalBudget.TargetKm)
+                if (signalBudget.TargetKm>0&&sp.DriveKm > signalBudget.TargetKm)
                 {
                     // Immediate zero on a measured excursion. Re-arm only after fresh
                     // below-limit data; retain the more conservative coefficient scale.
                     if (!signalTrip) signalBudget.FeedbackScale = Math.Min(1000, signalBudget.FeedbackScale * Math.Max(1.1, Math.Pow(sp.DriveKm / signalBudget.TargetKm, 2) * 1.1));
                     signalTrip = true;
                 }
-                else if (sp.DriveKm < signalBudget.TargetKm * SignalBudget.RangeMargin) signalTrip = false;
+                else if (signalBudget.TargetKm==0||sp.DriveKm < signalBudget.TargetKm * SignalBudget.RangeMargin) signalTrip = false;
             }
             if (!baselineReady)
             {
@@ -825,12 +840,12 @@ namespace ZeoNav
                 return 0;
             }
             double idle = Math.Sqrt(Math.Max(signalBudget.SphericalBaseSquared, signalBudget.DirectionalBaseSquared));
-            if (idle >= signalBudget.TargetKm * SignalBudget.RangeMargin)
+            if (signalBudget.TargetKm>0&&idle >= signalBudget.TargetKm * SignalBudget.RangeMargin)
             {
                 signalGovernorState = "IDLE SIG TOO HIGH / RAISE MAX OR REDUCE EMITTERS";
                 return 0;
             }
-            if (signalTrip)
+            if (signalBudget.TargetKm>0&&signalTrip)
             {
                 signalGovernorState = "OVER MAX SIG / THRUST ZERO";
                 return 0;
@@ -898,6 +913,53 @@ namespace ZeoNav
             getShip()?.RecordFlipTime(seconds);
             log((source ?? "FLIP") + " 180 MEASURED // " + seconds.ToString("0.00") + "s // learned allowance=" + (learnedFlipSeconds * 1.25).ToString("0.00") + "s");
             return seconds;
+        }
+
+        private DateTime nextArrivalEta=DateTime.MinValue;
+        private void UpdateArrivalEta(ShipContext s,NavConfig c,double distance,double closing,double speed,Vector3D direction,
+            double fullAcceleration,double gravity,double brake,double turn,bool preview)
+        {
+            if(DateTime.UtcNow<nextArrivalEta&&eta>=0)return;
+            nextArrivalEta=DateTime.UtcNow.AddSeconds(1);
+            double terminalAccel=0;
+            if(signalBudget!=null&&signalBudget.Ready)
+            {
+                double previousLimit=signalBudget.TargetKm;
+                try
+                {
+                    signalBudget.TargetKm=ApproachProfile.At(c,preview?distance:Vector3D.Distance(s.Position,routeStart)+distance,
+                        preview?c.BufferKm*1000:bufferMeters,preview?c.BufferKm*1000:bufferMeters,ApproachProfile.FullRange(signalBudget));
+                    terminalAccel=RcsStopAcceleration(s);
+                }
+                finally{signalBudget.TargetKm=previousLimit;}
+            }
+            RouteEta.Result result;
+            if(!preview&&closing<-.5&&phase!=NavPhase.TERMINAL_SETTLE)result=RouteEta.Result.Unknown;
+            else if(!preview&&phase==NavPhase.TERMINAL_SETTLE)
+                result=new RouteEta.Result{Seconds=RouteEta.Terminal(distance,speed,c.TerminalCruiseMps,terminalAccel,c.ArrivalRadiusMeters,c.ArrivalSpeedMps)};
+            else if(!preview&&(phase==NavPhase.BRAKE||phase==NavPhase.FLIP||phase==NavPhase.PRE_FLIP))
+            {
+                double remainingTurn=phase==NavPhase.BRAKE?0:turn;
+                if(phase==NavPhase.FLIP&&flipStartedUtc!=DateTime.MinValue)
+                    remainingTurn=Math.Max(0,turn-(DateTime.UtcNow-flipStartedUtc).TotalSeconds);
+                result=RouteEta.RemainingBrake(distance,speed,brake,remainingTurn,c.TerminalCruiseMps,terminalAccel,c.ArrivalRadiusMeters,c.ArrivalSpeedMps);
+            }
+            else if(!preview&&(phase==NavPhase.INITIAL_BRAKE||phase==NavPhase.CANCEL_LATERAL||closing<-.5))
+                result=RouteEta.Result.Unknown; // A recovery path is not a direct arrival estimate.
+            else
+            {
+                Vector3D position=s.Position,start=preview?position:routeStart;
+                double fullRange=ApproachProfile.FullRange(signalBudget), buffer=preview?Math.Max(0,c.BufferKm*1000):bufferMeters;
+                result=RouteEta.Plan(distance,Math.Max(0,closing),commandSpeed,travel=>{
+                    double departed=!preview&&departureCleared?c.DepartureDistanceKm*1000:Vector3D.Distance(position+direction*travel,start);
+                    double limit=ApproachProfile.At(c,departed,Math.Max(buffer,distance-travel+buffer),buffer,fullRange);
+                    return fullAcceleration*ApproachProfile.Ratio(signalBudget,limit)+gravity;
+                },brake,turn,c.TerminalCruiseMps,terminalAccel,c.ArrivalRadiusMeters,c.ArrivalSpeedMps);
+                if(!preview&&phase==NavPhase.ALIGN_PROGRADE&&result.Seconds>=0)
+                    result.Seconds+=s.ForwardAngleDegrees(direction)/180*turn;
+            }
+            eta=SignalBudget.Finite(result.Seconds)?result.Seconds:-1;
+            accelTime=result.Acceleration;coastTime=result.Coast;flipBurnTime=result.TurnAndBrake;plannedEtaPeak=result.Peak;
         }
 
         private void CalculateEta(double distance, double startSpeed, double cap, double accel, double brake, double flipTime)
@@ -969,7 +1031,7 @@ namespace ZeoNav
             Vector3D vel = s.Velocity;
             double closing = routeDir.LengthSquared() > 0 ? Vector3D.Dot(vel, routeDir) : 0;
             effectiveDriveRatio = EstimateSignalRatio(c, s);
-            effectiveDriveRatio=Math.Min(effectiveDriveRatio,ApproachProfile.Ratio(signalBudget,ApproachProfile.Effective(c,true,rawDist<=c.ApproachDistanceKm*1000)));
+            effectiveDriveRatio=Math.Min(effectiveDriveRatio,ApproachProfile.Ratio(signalBudget,ApproachProfile.At(c,0,rawDist,buffer,ApproachProfile.FullRange(signalBudget))));
             double mass = Math.Max(1, s.Mass);
             if (s.Force(MoveDir.Forward) <= 1)
             {
@@ -991,14 +1053,14 @@ namespace ZeoNav
             double flipAllowance = FlipAllowance(c);
             if (SpeedCapIsReliable() && effectiveDriveRatio > 0 && previewBrakeRatio > 0)
             {
-                CalculateEta(dist, Math.Max(0, closing), commandSpeed, accel, brake, flipAllowance);
+                UpdateArrivalEta(s,c,dist,closing,vel.Length(),routeDir,s.Force(MoveDir.Forward)/mass,gravityAlong,brake*.8,flipAllowance,true);
                 double fullThrusterAccel = s.Force(MoveDir.Forward) / mass;
                 double fullAccel = Math.Max(.01, fullThrusterAccel + gravityAlong);
                 double fullBrake = Math.Max(.01, fullThrusterAccel - gravityAlong);
                 fullDriveEta = EstimateEta(dist, Math.Max(0, closing), commandSpeed, fullAccel, fullBrake, flipAllowance);
                 timeSavedAtFull = eta >= 0 && fullDriveEta >= 0 ? Math.Max(0, eta - fullDriveEta) : 0;
-                double plannedPeak = coastTime > .001 ? commandSpeed : Math.Max(Math.Max(0, closing), brake * Math.Max(0, flipBurnTime - flipAllowance));
-                stopDistance = (plannedPeak * flipAllowance + plannedPeak * plannedPeak / (2.0 * brake)) * c.BrakeSafety;
+                double plannedPeak = Math.Max(Math.Max(0,closing),plannedEtaPeak);
+                stopDistance = (plannedPeak * flipAllowance + plannedPeak * plannedPeak / (2.0 * brake*.8)) * c.BrakeSafety;
                 flipAt = Math.Min(dist, stopDistance);
                 flipIn = Math.Max(0, accelTime + coastTime);
             }
@@ -1030,7 +1092,7 @@ namespace ZeoNav
         {
             if (phase == p) return;
             NavPhase old = phase;
-            phase = p;
+            phase = p; nextArrivalEta=DateTime.MinValue;
             if(dampenerAssist&&p!=NavPhase.INITIAL_BRAKE&&p!=NavPhase.TERMINAL_SETTLE)AssistDampeners(getShip(),false);
             onTargetTicks = 0;
             thrustAlignment.Reset();

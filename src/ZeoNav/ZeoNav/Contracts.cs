@@ -88,7 +88,7 @@ namespace ZeoNav
 
         [DataMember] public double BufferKm = 5.0;
         [DataMember] public int DriveSlider = 45; // legacy migration only
-        [DataMember] public double MaxDriveSigKm = 125.0;
+        [DataMember] public double MaxDriveSigKm = 0.0; // 0 = no SIG restriction
         [DataMember] public double FlipTimeSeconds = 20.0;
         [DataMember] public string FlipAxisMode="AUTO", FlipTurnMode="AUTO";
         [DataMember] public double RcsFlipAdvantagePct=30;

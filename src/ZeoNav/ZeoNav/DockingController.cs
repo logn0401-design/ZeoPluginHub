@@ -252,16 +252,17 @@ namespace ZeoNav
                     if(Vector3D.DistanceSquared(s.Position,preparationPosition)>.25){Abort("Dock preparation stopped: ship drifted over 0.5 m. Stop and retry.");return;}
                     s.SetDampeners(false);s.ClearThrust();s.ApplyDockRotation(Vector3D.Zero);
                     var feed=spectrum();bool fresh=feed!=null&&feed.DriveKmReady;
-                    bool ready=preparation.Observe(fresh,fresh?feed.SampleGeneration:-1,s.ThrustersQuiet,s.Velocity.Length(),(now-started).TotalSeconds);
+                    double limit=ApproachProfile.Arrival(config());
+                    bool ready=limit==0?s.ThrustersQuiet&&s.Velocity.Length()<.2&&(now-started).TotalSeconds>.5:preparation.Observe(fresh,fresh?feed.SampleGeneration:-1,s.ThrustersQuiet,s.Velocity.Length(),(now-started).TotalSeconds);
                     Status=preparation.Status;
                     if(preparation.Failed){Abort(Status);return;}
                     if(!ready)return;
-                    s.RefreshWorkingState();s.RefreshSignatureTopology();budget=feed.BuildBudget(s,true);budget.TargetKm=ApproachProfile.Arrival(config());
-                    budget.SphericalBaseSquared=feed.SphericalWeakKm*feed.SphericalWeakKm;budget.DirectionalBaseSquared=feed.DirectionalWeakKm*feed.DirectionalWeakKm;budget.Ready=true;
+                    s.RefreshWorkingState();s.RefreshSignatureTopology();budget=limit==0?new SignalBudget():feed.BuildBudget(s,true);budget.TargetKm=limit;
+                    if(limit>0){budget.SphericalBaseSquared=feed.SphericalWeakKm*feed.SphericalWeakKm;budget.DirectionalBaseSquared=feed.DirectionalWeakKm*feed.DirectionalWeakKm;}budget.Ready=true;
                     authority=Enumerable.Range(0,6).Min(i=>s.RcsForce((MoveDir)i)/s.Mass*budget.Limit(i,1,new double[6]))*.5;
-                    if(feed.DriveKm>=budget.TargetKm*.99||authority<.01){Abort("Insufficient RCS authority within MAX SIG; raise the limit or reduce idle emissions.");return;}
+                    if((budget.TargetKm>0&&feed.DriveKm>=budget.TargetKm*.99)||authority<.01){Abort("Insufficient RCS authority within MAX SIG; raise the limit or reduce idle emissions.");return;}
                     s.SignatureBudget=budget;topology=s.TopologyRevision;Stage=preparedStage;
-                    Status=Stage+" — RCS docking to "+Destination;log("DOCK PREPARED // stage="+Stage+" speed="+s.Velocity.Length()+" ownSig="+feed.DriveKm+" maxSig="+budget.TargetKm+" authority="+authority);
+                    Status=Stage+" — RCS docking to "+Destination;log("DOCK PREPARED // stage="+Stage+" speed="+s.Velocity.Length()+" ownSig="+(fresh?feed.DriveKm:0)+" maxSig="+budget.TargetKm+" authority="+authority);
                 }
                 var velocities=c.GetShipVelocities();
                 var desired=Stage==DockStage.Clear?clearingAttitude:MatrixD.CreateWorld(Vector3D.Zero,-targetPose.Forward,targetPose.Up);
@@ -298,8 +299,10 @@ namespace ZeoNav
                     var currentGrids=s.GetMechanicalConstructGrids().Select(g=>g.EntityId).ToArray();
                     if(!DockingMath.SameConstruct(hullPoses.Keys,currentGrids)){log("DOCK TOPOLOGY // expected="+string.Join(",",hullPoses.Keys.OrderBy(id=>id))+" actual="+string.Join(",",currentGrids.OrderBy(id=>id)));Abort("Ship mechanical topology changed; docking released.");return;}
                     s.RefreshSignatureTopology();
-                    var feed=spectrum();budget.TargetKm=ApproachProfile.Arrival(config());
-                    if(!feed.DriveKmReady||feed.DriveKm>budget.TargetKm*.99||s.TopologyRevision!=topology){Abort("Docking stopped: own signal, MAX SIG or drive availability changed.");return;}
+                    var feed=spectrum();double limit=ApproachProfile.Arrival(config());
+                    if(budget.TargetKm==0&&limit>0){Abort("A finite docking SIG limit requires a new quiet baseline; retry Auto Dock.");return;}
+                    budget.TargetKm=limit;
+                    if((limit>0&&(feed==null||!feed.DriveKmReady||feed.DriveKm>limit*.99))||s.TopologyRevision!=topology){Abort("Docking stopped: own signal, MAX SIG or drive availability changed.");return;}
                     authority=Enumerable.Range(0,6).Min(i=>s.RcsForce((MoveDir)i)/s.Mass*budget.Limit(i,1,new double[6]))*.5;
                     if(authority<.01||s.Gyros.Count==0){Abort("Docking maneuvering authority lost within MAX SIG.");return;}
                     if(!ClearPath(s.Grid.WorldAABB.Center,goal,Stage==DockStage.Capture)){Abort("Docking corridor obstructed; approach stopped.");return;}

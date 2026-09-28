@@ -81,8 +81,8 @@ namespace ZeoNav
         {
             var budget=SignatureBudget;
             return AllowRcsFlip && !(FlipTurnMode=="AUTO"&&AdaptiveTurnReady) && FlipTurnMode!="GYRO" && !rcsTurnRejected && budget!=null && budget.Ready &&
-                budget.PredictedSquared(new double[]{1,1,1,1,1,1}) <=
-                Math.Pow(budget.TargetKm*SignalBudget.RangeMargin*.85,2);
+                (budget.TargetKm==0 || budget.PredictedSquared(new double[]{1,1,1,1,1,1}) <=
+                Math.Pow(budget.TargetKm*SignalBudget.RangeMargin*.85,2));
         }
         private void SelectTurnBank(double angle)
         {
