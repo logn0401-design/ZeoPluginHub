@@ -4,15 +4,15 @@
   <RepoId>logn0401-design/ZeoPluginHub</RepoId>
   <FriendlyName>Zeo Nav</FriendlyName>
   <Author>Zeo-Corps</Author>
-  <Tooltip>1.1.23 — Menu input fixes, unrestricted SIG and arrival ETA.</Tooltip>
-  <Description>Ship navigation, signal intercept, velocity matching and docking. Uncapped MAX SIG: 0 = unrestricted; saved limits retained. Smooth departure/arrival limits and arrival-aware ETA. Native settings input fixes with a matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local Nav entries before enabling this catalog entry. Offline validated; live flight/menu testing remains required.</Description>
+  <Tooltip>1.1.25 — Protected SIG zones, flight recovery and steadier ETA.</Tooltip>
+  <Description>Ship navigation, signal intercept, velocity matching and docking. MAX SIG 0 is unrestricted; saved limits remain intact. Departure/arrival limits hold throughout their zones, with transition ramps outside. Improved motion recovery, intercept engagement, stalled-turn handling and ETA presentation. Matching capture-safe external HUD. Windows / Pulsar Legacy. Disable older local Nav entries before enabling this catalog entry. Offline validated; test flight behavior in creative first.</Description>
   <Runtimes>CLR</Runtimes>
   <Platforms>Windows</Platforms>
-  <Commit>f399ebba9ca7678f851de379ebfa2006b33b127e</Commit>
+  <Commit>ffcb607212e51bcd0a8148f28c7af40d72f2fa80</Commit>
   <SourceDirectories>
     <Directory>loader/ZeoNav/</Directory>
   </SourceDirectories>
-  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.1.23/ZeoNav.dll" Sha256="67b2f79b1e38e8d615990a8e7ed09705ce1f519be2a600e60bafa707b903f561" Reference="true" />
-  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.1.23/ZeoNavOverlay.zip" Sha256="e75834f6468146f30176fbf359e7484a35abb893040e4eaed6f4b70a3ffd590c" Extract="true" />
-  <Asset Name="ZeoNavThirdPartyNotice" Path="assets/zeonav/1.1.23/OwendB1-AutoDock-LICENSE.txt" Sha256="1126322e2cc8d165adc4c792eeb195717de2bcc7b39be1ce77959d78e87ef685" />
+  <Asset Name="ZeoNavRuntime" Path="assets/zeonav/1.1.25/ZeoNav.dll" Sha256="e4d87607873f61e7d03ea81663eb8eea3c92351252f094171b6c37720995c53e" Reference="true" />
+  <Asset Name="ZeoNavOverlayPackage" Path="assets/zeonav/1.1.25/ZeoNavOverlay.zip" Sha256="392b9e7a413eb7126262b303c1cab8215b86284a5ae372d3ed597121acb71f1c" Extract="true" />
+  <Asset Name="ZeoNavThirdPartyNotice" Path="assets/zeonav/1.1.25/OwendB1-AutoDock-LICENSE.txt" Sha256="1126322e2cc8d165adc4c792eeb195717de2bcc7b39be1ce77959d78e87ef685" />
 </PluginData>
