@@ -15,13 +15,15 @@ internal static partial class Tests
         var c=new NavConfig{MaxDriveSigKm=1000,DepartureSigEnabled=true,DepartureSigKm=100,DepartureDistanceKm=100,
             ApproachSigEnabled=true,ApproachSigKm=200,ApproachDistanceKm=100};
         Check("Departure begins at selected quiet limit",ApproachProfile.At(c,0,1000000,5000,2000)==100);
-        Check("Departure midpoint blends rather than holds a step",ApproachProfile.At(c,50000,1000000,5000,2000)==550);
-        Check("Departure reaches cruise at the zone edge",ApproachProfile.At(c,100000,1000000,5000,2000)==1000);
-        Check("Arrival enters without a sudden ceiling drop",ApproachProfile.At(c,1000000,100000,5000,2000)==1000);
-        Check("Arrival midpoint blends toward quiet limit",ApproachProfile.At(c,1000000,52500,5000,2000)==600);
+        Check("Departure maximum holds throughout protected zone",ApproachProfile.At(c,50000,1000000,5000,2000)==100&&ApproachProfile.At(c,100000,1000000,5000,2000)==100);
+        Check("Departure midpoint outside zone blends toward cruise",ApproachProfile.At(c,150000,1000000,5000,2000)==550);
+        Check("Departure reaches cruise after protected zone",ApproachProfile.At(c,200000,1000000,5000,2000)==1000);
+        Check("Arrival starts its ramp before protected zone",ApproachProfile.At(c,1000000,205000,5000,2000)==1000);
+        Check("Arrival midpoint outside zone blends toward quiet limit",ApproachProfile.At(c,1000000,155000,5000,2000)==600);
+        Check("Arrival maximum holds throughout protected zone",ApproachProfile.At(c,1000000,105000,5000,2000)==200&&ApproachProfile.At(c,1000000,50000,5000,2000)==200);
         Check("Arrival reaches selected limit at buffer, not at GPS center",ApproachProfile.At(c,1000000,5000,5000,2000)==200);
         bool smooth=true;double previous=100;
-        for(int i=1;i<=1000;i++)
+        for(int i=1;i<=2000;i++)
         {
             double n=ApproachProfile.At(c,i*100d,1000000,5000,2000);
             smooth&=n>=previous&&n<=1000&&n-previous<1.36;previous=n;
@@ -29,11 +31,20 @@ internal static partial class Tests
         Check("Departure curve stays continuous, monotonic and below cruise",smooth);
         c.MaxDriveSigKm=0;
         Check("Unlimited cruise still honors finite arrival/departure limits",ApproachProfile.Arrival(c)==200&&ApproachProfile.Departure(c)==100);
-        Check("Finite departure transitions toward modeled full-bank SIG",ApproachProfile.At(c,50000,1000000,5000,2000)==1050);
+        Check("Finite departure transitions toward modeled full-bank SIG outside zone",ApproachProfile.At(c,150000,1000000,5000,2000)==1050);
         Check("Outside finite zones cruise is genuinely unrestricted",ApproachProfile.At(c,1000000,1000000,5000,2000)==0);
         c.ApproachSigKm=0;c.DepartureSigKm=0;
         Check("Zero profile limits impose no restriction",ApproachProfile.At(c,0,1,5000,2000)==0&&!ApproachProfile.NeedsModel(c));
         Check("Zero combines with finite limits without suppressing thrust",ApproachProfile.Restrict(0,180)==180&&ApproachProfile.Restrict(180,0)==180);
+        c.MaxDriveSigKm=400;c.DepartureSigKm=180;c.ApproachSigKm=150;c.ApproachSigEnabled=true;c.DepartureSigEnabled=true;
+        Check("Overlapping protected zones use stricter limit",ApproachProfile.At(c,0,5000,5000,2000)==150);
+        var displayEta=new EtaPresentation();var epoch=new DateTime(2026,9,29,0,0,0,DateTimeKind.Utc);
+        Check("ETA display begins at planner value",displayEta.Observe(epoch,500)==500);
+        double jittered=displayEta.Observe(epoch.AddSeconds(1),503);
+        Check("Small thrust/telemetry wiggle does not swing displayed ETA",jittered>499&&jittered<501);
+        Check("Real loss of authority lengthens ETA immediately",displayEta.Observe(epoch.AddSeconds(2),650)==650);
+        Check("Moderate genuine delay is shown promptly",displayEta.Observe(epoch.AddSeconds(2.1),670)==670);
+        Check("Unknown recovery ETA clears instead of displaying stale arrival",displayEta.Observe(epoch.AddSeconds(3),-1)<0&&displayEta.Observe(epoch.AddSeconds(4),600)==600);
         var trip=RouteEta.Plan(1000000,0,50000,x=>20,10,15,18,5,5,.35);
         var weak=RouteEta.Plan(1000000,0,50000,x=>2,10,15,18,5,5,.35);
         var slowFlip=RouteEta.Plan(1000000,0,50000,x=>20,10,90,18,5,5,.35);
@@ -57,15 +68,29 @@ internal static partial class Tests
         var actual=RouteEta.Plan(distance,0,50000,x=>accel,decel,turn,terminalSpeed,terminalAccel,5,.35);
         Check("Integrated ETA agrees with constant-acceleration arrival solution",Math.Abs(actual.Seconds-reference)<.001);
         var grid=FixtureProxy.Make<VRage.Game.ModAPI.IMyCubeGrid>(call=>call.MethodName=="get_EntityId"?42L:FixtureProxy.Default(call));
+        VRageMath.Vector3D position=VRageMath.Vector3D.Zero;
         var pilot=FixtureProxy.Make<Sandbox.ModAPI.IMyShipController>(call=>{
             if(call.MethodName=="get_CubeGrid")return grid;
             if(call.MethodName=="get_WorldMatrix")return VRageMath.MatrixD.Identity;
+            if(call.MethodName=="get_WorldAABB")return new VRageMath.BoundingBoxD(position-VRageMath.Vector3D.One,position+VRageMath.Vector3D.One);
             return FixtureProxy.Default(call);
         });
         var ship=new ShipContext(pilot,_=>{});
         var config=new NavConfig();
         var nav=new NavController(()=>ship,()=>config,()=>null,_=>{});
         NavSet(nav,"active",true);
+        config.MaxDriveSigKm=400;config.DepartureSigEnabled=true;config.DepartureSigKm=180;config.DepartureDistanceKm=100;
+        NavSet(nav,"routeStart",VRageMath.Vector3D.Zero);
+        NavSet(nav,"gpsTarget",VRageMath.Vector3D.Forward*600000);
+        NavSet(nav,"bufferMeters",5000d);
+        var activeLimit=typeof(NavController).GetMethod("ActiveSigKm",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        position=VRageMath.Vector3D.Forward*50000;
+        Check("Actual controller holds 180 km cap inside departure zone",(double)activeLimit.Invoke(nav,new object[]{config})==180);
+        position=VRageMath.Vector3D.Forward*120000;NavSet(nav,"departureCleared",true);
+        Check("Actual controller gradually releases cap after departure zone",(double)activeLimit.Invoke(nav,new object[]{config})>180);
+        position=VRageMath.Vector3D.Forward*200000;
+        Check("Actual controller reaches cruise at end of release",(double)activeLimit.Invoke(nav,new object[]{config})==400);
+        config.MaxDriveSigKm=0;config.DepartureSigEnabled=false;
         var governor=typeof(NavController).GetMethod("CalculateDriveRatio",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
         Check("Actual unrestricted route governor works without Spectrum own feed",(double)governor.Invoke(nav,new object[]{config})==1&&ship.SignatureBudget.Ready&&ship.SignatureBudget.TargetKm==0);
         config.MaxDriveSigKm=1000;

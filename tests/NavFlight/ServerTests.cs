@@ -149,7 +149,7 @@ internal sealed class DriveFixture
                 case "get_EntityId": return id;
                 case "get_CustomName": return CustomName;
                 case "get_DefinitionDisplayNameText": return name;
-                case "get_WorldMatrix": return MatrixD.CreateWorld(Vector3D.Zero,exhaust,Vector3D.Up);
+                case "get_WorldMatrix": return MatrixD.CreateWorld(Vector3D.Zero,exhaust,Math.Abs(Vector3D.Dot(exhaust,Vector3D.Up))>.9?Vector3D.Forward:Vector3D.Up);
                 case "get_IsWorking": return Working;
                 case "get_Enabled": case "get_IsFunctional": return true;
                 case "get_MaxEffectiveThrust": case "get_MaxThrust": return force;

@@ -12,30 +12,49 @@ namespace ZeoNav
         internal int FaultGeneration {get;private set;}
         internal string LastFault {get;private set;}="";
         private bool modSource;
-        private Vector3D modAnchor, modIntegral, lastMod;
+        private Vector3D modAnchor, modIntegral, lastMod,lastModPosition;
         private double modTime, modWindow;
         private int modGood;
         internal void ObserveMod(Vector3D position,Vector3D physics,Vector3D velocity,double time,double accelerationBound)
         {
             ApiVelocity=physics;
-            if(!Finite(position)||!Finite(velocity)||velocity.Length()>100000||!SignalBudget.Finite(time))
+            if(!Finite(position)||!Finite(velocity)||velocity.Length()>100000||!SignalBudget.Finite(time)||!SignalBudget.Finite(accelerationBound))
             {Reset();Source="INVALID MOD VELOCITY";FaultGeneration++;return;}
-            if(!modSource){Reset();modSource=true;modAnchor=position;modIntegral=Vector3D.Zero;lastMod=velocity;modTime=modWindow=time;Source="WAIT MOD VELOCITY";RecoverableFault=true;return;}
+            if(!modSource){Reset();modSource=true;modAnchor=lastModPosition=position;modIntegral=Vector3D.Zero;lastMod=velocity;modTime=modWindow=time;Source="WAIT MOD VELOCITY";RecoverableFault=true;return;}
             double dt=time-modTime;
             if(dt==0)return;
-            if(dt<0||dt>1){Reset();Source="MOD VELOCITY TIME GAP";FaultGeneration++;return;}
+            if(dt<0||dt>1){Reset();Source="MOD VELOCITY TIME GAP";LastFault="simulation step="+dt.ToString("0.000")+"s";FaultGeneration++;return;}
+            double stepDistance=(position-lastModPosition).Length();
+            lastModPosition=position;
+            if(stepDistance>Math.Max(1000,Math.Max(lastMod.Length(),velocity.Length())*2+Math.Max(0,accelerationBound)*2))
+            {Ready=false;modGood=0;RecoverableFault=false;Source="MOD POSITION JUMP";LastFault="step="+dt.ToString("0.000")+"s displacement="+stepDistance.ToString("0.0")+"m";FaultGeneration++;modAnchor=position;modTime=modWindow=time;modIntegral=Vector3D.Zero;lastMod=velocity;return;}
             modIntegral+=(lastMod+velocity)*(.5*dt);lastMod=velocity;modTime=time;
             Velocity=velocity;
             double age=time-modWindow;
             if(age<.499)return;
             Vector3D displacement=position-modAnchor;
             MeasuredVelocity=displacement/age;
-            double residual=(displacement-modIntegral).Length();
+            Vector3D expectedDisplacement=modIntegral;
+            double residual=(displacement-expectedDisplacement).Length();
             double tolerance=Math.Max(150,velocity.Length()*.15)+Math.Max(0,accelerationBound)*age*age;
             bool frozen=displacement.Length()<.01&&velocity.Length()>5;
             bool bad=residual>tolerance||frozen;
             modAnchor=position;modWindow=time;modIntegral=Vector3D.Zero;
-            if(bad){Ready=false;modGood=0;RecoverableFault=residual<Math.Max(1000,velocity.Length()*.3);Source="MOD / POSITION DISAGREEMENT";LastFault="modSpeed="+velocity.Length().ToString("0.0")+" residual="+residual.ToString("0.0")+"m frozen="+frozen;FaultGeneration++;return;}
+            if(bad)
+            {
+                Ready=false;modGood=0;
+                // A delayed pose can fall behind (and then catch up) by one or two
+                // motion windows at server speed. Quarantine it without trusting
+                // the clipped physics velocity. Larger jumps still fail immediately.
+                double travel=expectedDisplacement.Length();
+                RecoverableFault=Finite(MeasuredVelocity)&&age<=1.5&&
+                    residual<=Math.Max(1000,travel*2+tolerance);
+                Source="MOD / POSITION DISAGREEMENT";
+                LastFault="modSpeed="+velocity.Length().ToString("0.0")+" residual="+residual.ToString("0.0")+
+                    "m frozen="+frozen+" window="+age.ToString("0.000")+"s observed="+displacement+
+                    " expected="+expectedDisplacement+" recoverable="+RecoverableFault;
+                FaultGeneration++;return;
+            }
             modGood++;Ready=modGood>=2;RecoverableFault=true;Source=Ready?"FLIP AND BURN / WORLD CHECK":"WAIT MOD VELOCITY";
         }
         private Vector3D anchor,previous;

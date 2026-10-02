@@ -801,7 +801,8 @@ namespace ZeoNavOverlay
             y += titleRow;
             Color stateColor = StateColor(c, p, s.Phase);
             DrawText(g, s.Phase ?? "DISARMED", stateColor, x, y, 18, c.PhaseScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont), Math.Max(1,usable*.66f));
-            DrawTextRight(g, "ETA " + Time(s.EtaSeconds), p.Text, x + usable, y + 2, 14, c.EtaScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
+            string etaLabel=s.EtaSeconds<0&&(s.Phase=="INITIAL BRAKE"||s.Phase=="CANCEL LATERAL")?"ETA REPLANNING":"ETA "+Time(s.EtaSeconds);
+            DrawTextRight(g, etaLabel, p.Text, x + usable, y + 2, 14, c.EtaScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
             y += phaseRow;
             bool capReady = s.SpeedCapMps > 1 && (s.SpeedCapSource ?? "").IndexOf("WAIT", StringComparison.OrdinalIgnoreCase) < 0;
             string speedLine = s.State=="DOCKING" ? DockSpeedText(s) : capReady
@@ -809,7 +810,7 @@ namespace ZeoNavOverlay
                 : "SPD " + Speed(s.SpeedMps) + "   //   CAP NOT RESOLVED";
             DrawText(g, speedLine, p.Text, x, y, 13, c.SpeedScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable));
             y += speedRow;
-            string sig = s.SpectrumKmReady ? "SIG " + SigKmText(s.SpectrumDriveKm) + " / MAX " + SigLimitText(s.MaxDriveSigKm) : "SIG KM WAIT / MAX " + SigLimitText(s.MaxDriveSigKm);
+            string sig = s.SpectrumKmReady ? "SIG " + SigKmText(s.SpectrumDriveKm) + " / ACTIVE CAP " + SigLimitText(s.MaxDriveSigKm) : "SIG KM WAIT / ACTIVE CAP " + SigLimitText(s.MaxDriveSigKm);
             DrawText(g, sig, p.Accent, x, y, 12, c.SignalScale * c.GlobalScale, FontStyle.Bold, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.66f));
             DrawTextRight(g, "THRUST " + (s.ForwardCommandRatio * 100).ToString("0") + "%", p.Secondary, x + usable, y, 11, c.SignalScale * c.GlobalScale, HudBodyFont(c, true, effectiveFrame, effectiveFont), Math.Max(1,usable*.32f));
             y += signalRow;
@@ -828,6 +829,12 @@ namespace ZeoNavOverlay
             else if (s.ManualFlipActive)
             {
                 DrawText(g, "MANUAL FLIP  " + s.ManualFlipDegreesLeft.ToString("0") + "° LEFT", p.Warning, x, y, 16, c.FlipScale * c.GlobalScale, FontStyle.Bold, HudTitleFont(c, effectiveFrame, effectiveFont), Math.Max(1,usable));
+            }
+            else if(s.Phase=="INITIAL BRAKE")
+            {
+                DrawText(g,"RECOVERY TURN  "+s.AlignmentErrorDeg.ToString("0.0")+"° LEFT  /  "+s.AngularSpeedDeg.ToString("0.0")+"°/S",p.Warning,x,y,12,c.FlipScale*c.GlobalScale,FontStyle.Bold,HudBodyFont(c,true,effectiveFrame,effectiveFont),Math.Max(1,usable));
+                y+=flipRow;
+                DrawText(g,"STOP "+Dist(s.StopDistanceMeters)+"   LAT "+s.LateralMps.ToString("0.0")+" M/S",p.Secondary,x,y,11,c.StopScale*c.GlobalScale,FontStyle.Regular,HudBodyFont(c,true,effectiveFrame,effectiveFont),Math.Max(1,usable));
             }
             else
             {
@@ -1745,7 +1752,7 @@ namespace ZeoNavOverlay
             if (driveCompare != null)
             {
                 string actual = snapshot.SpectrumKmReady ? SigKmText(snapshot.SpectrumDriveKm) : "WAIT";
-                driveCompare.Text = "MAX SIG " + SigLimitText(snapshot.MaxDriveSigKm) + "   // ACTUAL " + actual +
+                driveCompare.Text = "ACTIVE SIG CAP " + SigLimitText(snapshot.MaxDriveSigKm) + "   // ACTUAL " + actual +
                     "   // CMD " + (snapshot.ForwardCommandRatio * 100.0).ToString("0.0") + "%   // ETA " + Time(snapshot.EtaSeconds) +
                     "   // " + (snapshot.SignalGovernorState ?? "IDLE");
             }
@@ -1753,7 +1760,7 @@ namespace ZeoNavOverlay
                 streamerButton.Text = cfg.StreamerMode ? "STREAMER MODE: ON" : "STREAMER MODE: OFF";
             if (spectrum != null)
                 spectrum.Text = snapshot.SpectrumKmReady
-                    ? "Own-ship signature " + SigKmText(snapshot.SpectrumDriveKm) + " / MAX " + SigLimitText(snapshot.MaxDriveSigKm) +
+                    ? "Own-ship signature " + SigKmText(snapshot.SpectrumDriveKm) + " / ACTIVE CAP " + SigLimitText(snapshot.MaxDriveSigKm) +
                       "   // available thrust " + (snapshot.DriveRatio * 100.0).ToString("0.00") + "%   // KM source " + (snapshot.SpectrumKmSource ?? "UNKNOWN") +
                       "   // sphere S/W " + SigKmText(snapshot.SphericalStrongKm) + " / " + SigKmText(snapshot.SphericalWeakKm) + "   // directional S/W " + SigKmText(snapshot.DirectionalStrongKm) + " / " + SigKmText(snapshot.DirectionalWeakKm)
                     : (snapshot.SpectrumReady

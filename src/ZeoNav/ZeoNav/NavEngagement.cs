@@ -18,6 +18,16 @@ namespace ZeoNav
     }
     internal static class MomentumCapture
     {
+        internal static double AlignmentSeconds(double angle,double angularRate,double fullTurnSeconds)
+        {
+            if(!SignalBudget.Finite(angle)||!SignalBudget.Finite(angularRate)||
+                !SignalBudget.Finite(fullTurnSeconds)||angle<0||angularRate<0||fullTurnSeconds<0)
+                return double.PositiveInfinity;
+            // The stopping plan already reserves a whole 180-degree flip. Only
+            // reserve the heading correction still needed to resume this burn.
+            if(angle<=.25&&angularRate<=.15)return 0;
+            return 2+fullTurnSeconds*Math.Min(180,angle)/180+Math.Min(30,angularRate*2);
+        }
         internal static bool InWindow(Vector3D velocity,Vector3D direction)
         {
             double speed=velocity.Length();
@@ -42,6 +52,7 @@ namespace ZeoNav
         internal void Reset(){since=double.NaN;episodes.Clear();Reason="";}
         internal MotionDecision Observe(WorldMotion motion,double time)
         {
+            if(!SignalBudget.Finite(time)){Reason="INVALID MOTION RECOVERY CLOCK";return MotionDecision.Abort;}
             if(Waiting&&(time<since||time-since>2)){Reason="SERVER MOTION DID NOT RECOVER WITHIN 2 SECONDS";return MotionDecision.Abort;}
             if(motion.Ready){if(Waiting){since=double.NaN;return MotionDecision.Recovered;}return MotionDecision.Clear;}
             if(!motion.RecoverableFault){Reason="VELOCITY UNVERIFIED / "+motion.Source;return MotionDecision.Abort;}

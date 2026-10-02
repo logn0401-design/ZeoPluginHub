@@ -30,9 +30,19 @@ namespace ZeoNav
             double cruise=Cruise(c),limit=cruise;
             if(c==null)return limit;
             if(c.DepartureSigEnabled&&c.DepartureSigKm>0)
-                limit=Restrict(limit,Blend(Departure(c),cruise,fromStart/Math.Max(1,c.DepartureDistanceKm*1000),fullRange));
+            {
+                double zone=Math.Max(1,c.DepartureDistanceKm*1000);
+                // The selected departure MAX is a ceiling throughout the whole
+                // protected zone. Release it smoothly over one more zone length.
+                limit=Restrict(limit,Blend(Departure(c),cruise,(fromStart-zone)/zone,fullRange));
+            }
             if(c.ApproachSigEnabled&&c.ApproachSigKm>0)
-                limit=Restrict(limit,Blend(Arrival(c),cruise,(toGps-buffer)/Math.Max(1,c.ApproachDistanceKm*1000-buffer),fullRange));
+            {
+                double zone=Math.Max(1,c.ApproachDistanceKm*1000);
+                double clearDistance=toGps-buffer;
+                // Likewise finish the arrival ramp before entering its protected zone.
+                limit=Restrict(limit,Blend(Arrival(c),cruise,(clearDistance-zone)/zone,fullRange));
+            }
             return limit;
         }
         internal static bool NeedsModel(NavConfig c)

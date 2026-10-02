@@ -34,6 +34,11 @@ internal static partial class Tests
         Check("Weak sideways thrust prevents uncorrectable high-speed capture",!MomentumCapture.HasRoom(900000,60000,1000,400,.01,20));
         Check("Aligned moving ship does not require sideways thrust",MomentumCapture.HasRoom(900000,60000,1000,0,0,20));
         Check("Non-finite stopping data cannot preserve a burn",!MomentumCapture.HasRoom(900000,double.PositiveInfinity,1000,20,1,20));
+        double aligned=MomentumCapture.AlignmentSeconds(.017,0,180);
+        Check("Recorded 1025 m/s recovery retains aligned momentum",aligned==0&&MomentumCapture.HasRoom(543496,314615,1025,0,2.426,aligned));
+        Check("Recovery still brakes when recorded stopping margin is absent",!MomentumCapture.HasRoom(314000,314615,1025,0,2.426,aligned));
+        Check("Large heading correction retains a measured turn reserve",MomentumCapture.AlignmentSeconds(90,1,180)>90);
+        Check("Missing turn telemetry cannot authorize continued acceleration",!MomentumCapture.HasRoom(543496,314615,1025,0,2.426,MomentumCapture.AlignmentSeconds(.017,double.NaN,180)));
 
         var m=CorrectedMotion();var recovery=new MotionRevalidation();
         Check("Moderate server correction invalidates velocity and records sample",!m.Ready&&m.RecoverableFault&&m.LastFault.Contains("residual="));

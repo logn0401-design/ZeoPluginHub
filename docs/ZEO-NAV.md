@@ -1,6 +1,6 @@
 # Zeo Nav for Pulsar
 
-**1.1.23 — Current Nav build and Left Shift target aim default**
+**1.1.25 — Current Nav build and Left Shift target aim default**
 
 Install **Zeo Nav** from the [Zeo Plugins catalog](../README.md#add-the-catalog). Requires Pulsar 2.4.2 or later, Legacy, Windows, and Space Engineers 1. The matching external HUD downloads automatically; a separate Nav installer or .NET SDK is not needed for players.
 
@@ -12,9 +12,9 @@ Install **Zeo Nav** from the [Zeo Plugins catalog](../README.md#add-the-catalog)
 
 MAX SIG accepts a finite, nonnegative whole-kilometer value with no 750 KM ceiling. **0 means no SIG restriction** and is the fresh-install default; saved limits remain unchanged. Positive limits use the farthest of your own ship's four Spectrum detection ranges, keep 3% range headroom, and require compatible fresh own-ship telemetry. Nav does not install server mods. Unrestricted cruise with a positive departure or arrival limit still waits for a fresh model so it can plan braking. With all limits unrestricted, own-SIG telemetry does not gate thrust. Speed settings support servers up to 50,000 m/s; thrust still depends on drives, fuel, heading, motion and braking authority.
 
-Quiet departure smoothly releases its selected limit over the departure distance. Quiet arrival smoothly lowers the limit from cruise at the approach boundary to the chosen arrival limit at the buffered destination. Overlapping zones use the stricter restriction; a zero zone adds no restriction beyond cruise. The controller retains conservative stopping authority at the final arrival ceiling.
+Quiet departure holds its selected MAX SIG throughout the chosen departure distance, then releases toward cruise over the same distance again. Quiet arrival finishes reducing toward its chosen MAX SIG before entering the arrival zone and holds that limit throughout the zone. Overlapping limits use the stricter ceiling; a zero zone adds no restriction beyond cruise. These are limits on Nav's commanded thrust and turn-bank planning. Other ship systems can emit additional signal, so compare the Spectrum own-ship reading during the first live test.
 
-The ETA predicts arrival rather than dividing distance by current speed: it samples future SIG-limited acceleration, the speed cap, learned flip allowance, remaining coast/braking, RCS terminal speed taper and final settling. It updates once per second. Recovery or unknown authority displays an unknown ETA; actual flight, server lag and course corrections can change the estimate.
+The ETA predicts arrival rather than dividing distance by current speed: it samples future SIG-limited acceleration, the speed cap, learned flip allowance, remaining coast/braking, RCS terminal speed taper and final settling. Its display smooths small telemetry changes but shows material delays promptly. Recovery braking displays `ETA REPLANNING` and measured turn progress; actual flight, server lag and course corrections can change the estimate.
 
 ## Switching from the one-click/local install
 
@@ -24,13 +24,13 @@ The catalog uses the same settings folder and loads its matching overlay from Pu
 
 ## Included behavior
 
-The current Nav build includes the SDX/Epstein main-drive catalog, searchable GPS, auto docking, target selection, intercept and speed matching, configurable flip and terminal controls, and the external HUD. Holding Left Shift opens the target picker by default on a fresh installation. Existing saved key bindings remain unchanged, and the aim key is editable on the Keys page. The [1.0.2 notes](ZEO-NAV-1.0.2.md) document earlier drive and GPS changes.
+The current Nav build includes the SDX/Epstein main-drive catalog, searchable GPS, auto docking, target selection, intercept and speed matching, configurable flip and terminal controls, and the external HUD. Version 1.1.24 added bounded world-motion revalidation and faster aligned intercept engagement. Version 1.1.25 avoids a duplicate full-flip reserve when already aligned and aborts stalled recovery turns after a bounded retry; a working RCS turn bank can be tried only when the configured mode and active SIG budget permit it. Holding Left Shift opens the target picker by default on a fresh installation. Existing saved key bindings remain unchanged, and the aim key is editable on the Keys page. The [1.0.2 notes](ZEO-NAV-1.0.2.md) document earlier drive and GPS changes.
 
 ## Updating and checking
 
-Refresh Pulsar sources and fully restart. The Nav log in `%APPDATA%/Pulsar/ZeoNav/zeonav.log` should identify `1.1.23`. The descriptor pins an immutable source commit and SHA-256 hashes for both runtime assets.
+Refresh Pulsar sources and fully restart. The Nav log in `%APPDATA%/Pulsar/ZeoNav/zeonav.log` should identify `1.1.25`. The descriptor pins an immutable source commit and SHA-256 hashes for both runtime assets.
 
-Offline validation passed: 823 flight/control checks, 3,231 UI/settings assertions and the actual Pulsar compiler/loader/asset checks. These do not prove live menu clicks, ETA accuracy, SIG transitions or flight on a mate's PC. Prefer a creative test before live-server use. This update does not claim to eliminate every server's wobble.
+Offline validation passed: 893 flight/control checks, 3,231 UI/settings assertions and the actual Pulsar compiler/loader/asset checks. These do not prove live SIG compliance, turn-bank recovery or flight on a mate's PC. Prefer a creative test before live-server use. A native AMD graphics-path crash was recorded both before and after the local 1.1.25 install; its exact trigger is unresolved, so this release does not claim to fix it.
 
 Compact-menu ON/OFF toggles now save independently of unfinished number edits. ENTER/APPLY commits its own numeric field while retaining other drafts. Rebuilt pages clear old input handlers, and clicks/validation failures are recorded in the Nav log. Close and emergency Abort remain available.
 

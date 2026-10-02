@@ -20,7 +20,7 @@ namespace ZeoNav
 {
     public sealed class Plugin : IPlugin
     {
-        public const string Version = "1.1.23";
+        public const string Version = "1.1.25";
         private string catalogOverlayPath;
 
         // Pulsar supplies this hash-verified package before Init. Settings remain in dataDir.

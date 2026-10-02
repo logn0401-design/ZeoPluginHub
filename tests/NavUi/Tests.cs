@@ -331,6 +331,11 @@ internal static class Tests
         apply.Invoke(hud,new[]{preview}); var rect=(RectangleF)boundsMethod.Invoke(hud,new object[]{1280,720});
         using(var image=new Bitmap(1280,720,PixelFormat.Format32bppPArgb)) using(var g=Graphics.FromImage(image))
         { g.Clear(Color.Transparent); draw.Invoke(hud,new object[]{g,rect,rect}); image.Save(Path.Combine(scratch,"active-layout-fixture.png"),ImageFormat.Png); }
+        set(preview,"Phase","INITIAL BRAKE");set(preview,"EtaSeconds",-1d);
+        set(preview,"AlignmentErrorDeg",179.984d);set(preview,"AngularSpeedDeg",0d);
+        apply.Invoke(hud,new[]{preview});
+        using(var image=new Bitmap(1280,720,PixelFormat.Format32bppPArgb))using(var g=Graphics.FromImage(image))
+        {g.Clear(Color.Transparent);draw.Invoke(hud,new object[]{g,rect,rect});image.Save(Path.Combine(scratch,"recovery-turn-fixture.png"),ImageFormat.Png);}
         set(preview,"State","DOCKING");set(preview,"Phase","DOCK CAPTURE");set(preview,"SpeedMps",.23d);set(preview,"SpeedCapMps",.25d);set(preview,"SpeedCapSource","DOCK RCS");set(preview,"DistanceMeters",2d);set(preview,"EtaSeconds",-1d);
         apply.Invoke(hud,new[]{preview});
         using(var image=new Bitmap(1280,720,PixelFormat.Format32bppPArgb))using(var g=Graphics.FromImage(image))

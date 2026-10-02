@@ -5,7 +5,7 @@ Space Engineers plugins for Windows and Pulsar Legacy, with native settings menu
 | Plugin | Release | Purpose |
 |---|---|---|
 | Zeo Core | 1.0.8 | Tactical HUD, shared tracks, distress, docked refill and configurable signals |
-| Zeo Nav | 1.1.23 | Navigation, signal intercept, velocity matching and docking |
+| Zeo Nav | 1.1.25 | Navigation, signal intercept, velocity matching and docking |
 | Zeo PDC Manager | 0.3.31 | WeaponCore point-defense management and threat/weapon diagnostics |
 | Zeo Ore Helper | 1.0.5 | Ore surveys, asteroid/deposit search and configurable mining HUD |
 
@@ -31,7 +31,7 @@ For immediate Nav testing, download [Nav fast-update setup](https://github.com/l
 
 Core's MENU KEY now supports click, press a key, then APPLY; Escape/Cancel discards a draft. Existing shortcuts are retained. Clear+Apply disables Core's shortcut; Pulsar Configure can reopen it. Core also includes the accumulated HUD, refill, tracking, help and performance-candidate work. PDC and Ore preserve their existing capture UI and protect text entry from menu hotkeys. PDC now receives its overlay from the same verified catalog release as its runtime.
 
-Nav 1.1.23 fixes compact-menu setting input, removes the 750 KM SIG ceiling, and makes 0 the fresh default for unrestricted SIG. Existing saved limits and keys remain unchanged. Quiet departure and arrival smoothly blend their limits over the chosen distances; enabled positive zone limits still apply with unrestricted cruise. Arrival ETA now includes future thrust changes, the speed cap, remaining flip/braking and terminal settling. Only Nav changes in this update; live menu and flight testing is still required. See [Nav notes](docs/ZEO-NAV.md) and [validation](docs/ZEO-NAV-VALIDATION.md).
+Nav 1.1.25 includes the 1.1.24 motion-recovery and intercept corrections, then holds selected departure/arrival SIG limits throughout their protected zones, removes a duplicate flip allowance that could cause premature braking, bounds stalled-turn recovery, and steadies the displayed ETA. Existing settings and keys remain unchanged. Only Nav changes in this update; live flight and signal-cap behavior still need a creative-mode check. See [Nav notes](docs/ZEO-NAV.md) and [validation](docs/ZEO-NAV-VALIDATION.md).
 
 Build, settings, migration and isolated loader/asset tests passed. These checks do not replace in-game multiplayer, flight, capture or heavy-combat validation. See [release validation](docs/CATALOG_RELEASE_2026-09-26.md) for the earlier catalog release.
 

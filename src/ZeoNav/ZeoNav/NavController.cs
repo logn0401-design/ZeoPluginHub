@@ -65,6 +65,10 @@ namespace ZeoNav
         private Vector3D manualFlipTarget;
         private DateTime flipStartedUtc = DateTime.MinValue;
         private readonly TurnProgressWatchdog flipProgress = new TurnProgressWatchdog();
+        private readonly TurnProgressWatchdog recoveryTurnProgress = new TurnProgressWatchdog();
+        private readonly EtaPresentation etaPresentation = new EtaPresentation();
+        private bool recoveryTurnTracking;
+        private bool recoveryRcsRetry;
         private double learnedFlipSeconds;
 
         private SignalBudget signalBudget;
@@ -102,7 +106,7 @@ namespace ZeoNav
             if (changed && !active && !manualFlip)
             {
                 phase = NavPhase.DISARMED;
-                warning = ""; nextArrivalEta=DateTime.MinValue;
+                warning = ""; nextArrivalEta=DateTime.MinValue; etaPresentation.Reset();
             }
         }
 
@@ -138,6 +142,7 @@ namespace ZeoNav
             Vector3D dir = path / rawDist;
             navTarget = gps - dir * bufferMeters;
             routeStartDistance = Vector3D.Distance(routeStart, navTarget);
+            etaPresentation.Reset(); recoveryTurnTracking=recoveryRcsRetry=false;
             lastDistance = routeStartDistance;
             distanceGrowingTicks = 0;
             s.SaveDampenersOnce();
@@ -313,14 +318,14 @@ namespace ZeoNav
             Vector3D vel = s.Velocity;
             double speed = vel.Length();
             s.RcsOnly=false; // Each frame chooses the required bank before commands commit.
-            s.AllowRcsFlip=false;
+            s.AllowRcsFlip=phase==NavPhase.INITIAL_BRAKE&&recoveryRcsRetry;
             double stopAssistSpeed=5;
             double closing = dir.LengthSquared() > 0 ? Vector3D.Dot(vel, dir) : 0;
             Vector3D lateralVec = vel - dir * closing;
             double lateral = lateralVec.Length();
 
             if(!departureCleared&&Vector3D.Distance(pos,routeStart)>=c.DepartureDistanceKm*1000)
-            {departureCleared=true;if(c.DepartureSigEnabled)log("DEPARTURE SIG // cleared departure zone; cruise ceiling available");}
+            {departureCleared=true;if(c.DepartureSigEnabled)log("DEPARTURE SIG // cleared protected zone; beginning gradual release toward cruise ceiling");}
             bool wasApproach=approachActive;
             approachActive=ApproachProfile.Activate(c,approachActive,Vector3D.Distance(pos,gpsTarget),phase);
             if(approachActive&&!wasApproach)log("APPROACH SIG // limit="+ApproachProfile.Arrival(c)+"km distance="+(Vector3D.Distance(pos,gpsTarget)/1000).ToString("0.0")+"km");
@@ -369,9 +374,12 @@ namespace ZeoNav
             if(momentumEntry)
             {
                 double sideAcceleration=Enumerable.Range(2,4).Min(i=>s.Force((MoveDir)i)/mass*signalBudget.Limit(i,1,idleStopCommands));
-                bool keep=MomentumCapture.InWindow(vel,dir)&&MomentumCapture.HasRoom(dist,stopDistance,closing,lateral,sideAcceleration,flipAllowance);
+                double actualTurnRate=double.PositiveInfinity;
+                try { actualTurnRate=s.Controller.GetShipVelocities().AngularVelocity.Length()*180/Math.PI; } catch { }
+                double alignSeconds=MomentumCapture.AlignmentSeconds(s.ForwardAngleDegrees(dir),actualTurnRate,flipAllowance);
+                bool keep=MomentumCapture.InWindow(vel,dir)&&MomentumCapture.HasRoom(dist,stopDistance,closing,lateral,sideAcceleration,alignSeconds);
                 momentumEntry=false;
-                log("MOVING ROUTE ENTRY // keep="+keep+" speed="+speed.ToString("0.0")+" lateral="+lateral.ToString("0.0")+" sideAccel="+sideAcceleration.ToString("0.000")+" distance="+dist.ToString("0")+" stop="+stopDistance.ToString("0"));
+                log("MOVING ROUTE ENTRY // keep="+keep+" speed="+speed.ToString("0.0")+" lateral="+lateral.ToString("0.0")+" sideAccel="+sideAcceleration.ToString("0.000")+" alignReserve="+alignSeconds.ToString("0.0")+"s distance="+dist.ToString("0")+" stop="+stopDistance.ToString("0"));
                 if(!keep)SetPhase(NavPhase.INITIAL_BRAKE,"insufficient correction or stopping room for moving entry");
             }
             if (SpeedCapIsReliable())
@@ -404,11 +412,23 @@ namespace ZeoNav
                     s.ClearThrust();
                     if(UseTerminalAtLowSpeed(speed,dist,stopAssistSpeed,c.ArrivalRadiusMeters,c.TerminalEnvelopeMeters))
                     {AssistDampeners(s,false);SetPhase(NavPhase.TERMINAL_SETTLE,"low-speed arrival / no main-drive flip");break;}
-                    if(speed<=stopAssistSpeed)FinishLowSpeedStop(s,vel);
+                    if(speed<=stopAssistSpeed){recoveryTurnTracking=false;FinishLowSpeedStop(s,vel);}
                     else
                     {
                         AssistDampeners(s,false);
                         Vector3D retro=-vel/speed;s.Orient(retro,2);
+                        double remainingTurn=s.ForwardAngleDegrees(retro);
+                        if(remainingTurn>2)
+                        {
+                            if(!recoveryTurnTracking)
+                            {
+                                recoveryTurnProgress.Reset(DateTime.UtcNow,remainingTurn);
+                                recoveryTurnTracking=true;
+                                log("RECOVERY TURN START // angle="+remainingTurn.ToString("0.0")+"deg speed="+speed.ToString("0.0")+"m/s");
+                            }
+                            if(!WatchRecoveryTurn(s,remainingTurn))break;
+                        }
+                        else recoveryTurnTracking=false;
                         if(s.ForwardAngleDegrees(retro)<=2)s.SetMove(MoveDir.Forward,Math.Min(effectiveDriveRatio,speed/(Math.Max(.01,fullThrusterAccel)*.8)));
                     }
                     if(speed<=.3)onTargetTicks++;else onTargetTicks=0;
@@ -681,16 +701,43 @@ namespace ZeoNav
             if(result==TurnProgress.Recover)
             {
                 log(mode+" FLIP AUTHORITY RETRY // "+evidence);
+                bool previousRcs=s.IsRcsTurnActive;
                 s.ReleaseGyros();
-                s.FlipTurnMode="GYRO";
-                s.BeginGyroControl();
+                bool retryRcs=!previousRcs&&getConfig().FlipTurnMode!="GYRO"&&s.BeginRcsTurnRetry();
+                if(!retryRcs){s.FlipTurnMode="GYRO";s.BeginGyroControl();}
                 onTargetTicks=0;
-                warning="RETRYING STANDARD GYRO TURN";
+                warning=retryRcs?"RETRYING SIG-SAFE RCS TURN":"RETRYING STANDARD GYRO TURN";
+                log(mode+" FLIP RETRY BANK // "+(retryRcs?"RCS / SIG VERIFIED":"STANDARD GYRO"));
                 return false;
             }
             Abort(mode+" FLIP STALLED // "+(s.CommandedTurnGyros==0||s.TurnReadbackDegPerSec<.05?
                 "GYRO COMMAND NOT HELD":"NO MEASURED ROTATION"));
             log(mode+" FLIP STALLED // "+evidence);
+            return false;
+        }
+
+        private bool WatchRecoveryTurn(ShipContext s,double angle)
+        {
+            TurnProgress result=recoveryTurnProgress.Observe(DateTime.UtcNow,angle,s.LastAngularRateDeg,
+                s.TurnRequestDegPerSec,s.CommandedTurnGyros);
+            if(result==TurnProgress.Continue)return true;
+            string evidence="angle="+angle.ToString("0.00")+"deg rate="+s.LastAngularRateDeg.ToString("0.00")+
+                "deg/s request="+s.TurnRequestDegPerSec.ToString("0.00")+"deg/s readback="+
+                s.TurnReadbackDegPerSec.ToString("0.00")+"deg/s gyros="+s.CommandedTurnGyros+
+                " source="+s.Motion.Source+" speed="+s.Velocity.Length().ToString("0.0")+"m/s // "+s.ForceSummary;
+            if(result==TurnProgress.Recover)
+            {
+                log("RECOVERY TURN AUTHORITY RETRY // "+evidence);
+                bool previousRcs=s.IsRcsTurnActive;
+                s.ReleaseGyros();
+                recoveryRcsRetry=!previousRcs&&getConfig().FlipTurnMode!="GYRO"&&s.BeginRcsTurnRetry();
+                if(!recoveryRcsRetry){s.FlipTurnMode="GYRO";s.BeginGyroControl();}
+                warning=recoveryRcsRetry?"RETRYING SIG-SAFE RCS TURN / THRUST OFF":"RETRYING STANDARD GYRO TURN / THRUST OFF";
+                log("RECOVERY TURN RETRY BANK // "+(recoveryRcsRetry?"RCS / SIG VERIFIED":"STANDARD GYRO"));
+                return false;
+            }
+            log("RECOVERY TURN STALLED // "+evidence);
+            Abort("RECOVERY TURN STALLED / MANUAL CONTROL REQUIRED");
             return false;
         }
 
@@ -720,8 +767,11 @@ namespace ZeoNav
         private double ActiveSigKm(NavConfig c)
         {
             var ship=getShip();
-            if(!active||ship==null)return ApproachProfile.Cruise(c);
-            return ApproachProfile.At(c,departureCleared?c.DepartureDistanceKm*1000:Vector3D.Distance(ship.Position,routeStart),
+            if(ship==null)return ApproachProfile.Cruise(c);
+            if(!active)
+                return hasPreview?ApproachProfile.At(c,0,Vector3D.Distance(ship.Position,previewGps),
+                    Math.Max(0,c.BufferKm*1000),ApproachProfile.FullRange(signalBudget)):ApproachProfile.Cruise(c);
+            return ApproachProfile.At(c,Vector3D.Distance(ship.Position,routeStart),
                 Vector3D.Distance(ship.Position,gpsTarget),bufferMeters,ApproachProfile.FullRange(signalBudget));
         }
 
@@ -852,7 +902,13 @@ namespace ZeoNav
             }
             signalBudget.Ready = true;
             double ratio = signalBudget.Limit(0, 1, new double[6]);
-            signalGovernorState = (approachActive ? "APPROACH SIG / " : c.DepartureSigEnabled&&!departureCleared ? "DEPARTURE SIG / " : "") + (ratio >= .999 ? "FULL THRUST AVAILABLE" : "SIGNATURE BUDGET");
+            double departureMeters=Vector3D.Distance(s.Position,routeStart);
+            double arrivalClearMeters=Vector3D.Distance(s.Position,gpsTarget)-bufferMeters;
+            string zone= c.ApproachSigEnabled&&c.ApproachSigKm>0&&arrivalClearMeters<2*c.ApproachDistanceKm*1000
+                ? (arrivalClearMeters<=c.ApproachDistanceKm*1000?"ARRIVAL CAP / ":"ARRIVAL RAMP / ")
+                : c.DepartureSigEnabled&&c.DepartureSigKm>0&&departureMeters<2*c.DepartureDistanceKm*1000
+                ? (departureMeters<=c.DepartureDistanceKm*1000?"DEPARTURE CAP / ":"DEPARTURE RAMP / "):"";
+            signalGovernorState = zone + (ratio >= .999 ? "FULL THRUST AVAILABLE" : "SIGNATURE BUDGET");
             if (newSample && routeClock.Elapsed.TotalSeconds - lastSignalLog >= 2)
             {
                 log("SIG GOV // max=" + signalBudget.TargetKm.ToString("0.0") + "km actual=" + sp.DriveKm.ToString("0.00") +
@@ -951,14 +1007,14 @@ namespace ZeoNav
                 Vector3D position=s.Position,start=preview?position:routeStart;
                 double fullRange=ApproachProfile.FullRange(signalBudget), buffer=preview?Math.Max(0,c.BufferKm*1000):bufferMeters;
                 result=RouteEta.Plan(distance,Math.Max(0,closing),commandSpeed,travel=>{
-                    double departed=!preview&&departureCleared?c.DepartureDistanceKm*1000:Vector3D.Distance(position+direction*travel,start);
+                    double departed=Vector3D.Distance(position+direction*travel,start);
                     double limit=ApproachProfile.At(c,departed,Math.Max(buffer,distance-travel+buffer),buffer,fullRange);
                     return fullAcceleration*ApproachProfile.Ratio(signalBudget,limit)+gravity;
                 },brake,turn,c.TerminalCruiseMps,terminalAccel,c.ArrivalRadiusMeters,c.ArrivalSpeedMps);
                 if(!preview&&phase==NavPhase.ALIGN_PROGRADE&&result.Seconds>=0)
                     result.Seconds+=s.ForwardAngleDegrees(direction)/180*turn;
             }
-            eta=SignalBudget.Finite(result.Seconds)?result.Seconds:-1;
+            eta=etaPresentation.Observe(DateTime.UtcNow,result.Seconds);
             accelTime=result.Acceleration;coastTime=result.Coast;flipBurnTime=result.TurnAndBrake;plannedEtaPeak=result.Peak;
         }
 
@@ -1100,6 +1156,8 @@ namespace ZeoNav
             if (s != null) s.ResetAim();
             if (p != NavPhase.FLIP) flipTargetSet = false;
             if (p == NavPhase.ARRIVED || p == NavPhase.ABORTED || p == NavPhase.DISARMED) idleStatusTicks = 0;
+            if(p!=NavPhase.INITIAL_BRAKE)recoveryTurnTracking=recoveryRcsRetry=false;
+            if(p!=NavPhase.INITIAL_BRAKE&&p!=NavPhase.FLIP&&warning.StartsWith("RETRYING ",StringComparison.Ordinal))warning="";
             log("STATE " + old + " -> " + p + " // " + reason);
             if(s!=null&&(p==NavPhase.PRE_FLIP||p==NavPhase.BRAKE||p==NavPhase.TERMINAL_SETTLE))
                 log("BRAKE PLAN // distance="+Vector3D.Distance(navTarget,s.Position).ToString("0.0")+"m stop="+stopDistance.ToString("0.0")+"m speed="+s.Velocity.Length().ToString("0.0")+"m/s api="+s.Motion.ApiVelocity.Length().ToString("0.0")+"m/s measured="+s.Motion.MeasuredVelocity.Length().ToString("0.0")+"m/s source="+s.Motion.Source+" mass="+s.Mass.ToString("0")+"kg flipAllowance="+FlipAllowance(getConfig()).ToString("0.0")+"s");

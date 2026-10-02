@@ -41,6 +41,7 @@ internal static partial class Tests
         ServerTests();
         MotionTests(); TargetTests();
         EngagementTests();
+        FlightFixTests();
         AutoDockTests();
         PickerTests();
         double weak = .1f, strong = .4f;

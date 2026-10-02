@@ -84,6 +84,19 @@ namespace ZeoNav
                 (budget.TargetKm==0 || budget.PredictedSquared(new double[]{1,1,1,1,1,1}) <=
                 Math.Pow(budget.TargetKm*SignalBudget.RangeMargin*.85,2));
         }
+        internal bool IsRcsTurnActive { get { return rcsTurnActive; } }
+        internal bool BeginRcsTurnRetry()
+        {
+            if(FlipTurnMode=="GYRO"||rcsTurnRejected||
+                !rcsGyros.Any(g=>g!=null&&!g.Closed&&g.IsFunctional&&
+                    g.CubeGrid==Controller.CubeGrid&&IsRcsComputer(g)))return false;
+            string priorMode=FlipTurnMode;
+            FlipTurnMode="RCS";AllowRcsFlip=true;
+            if(!RcsTurnAllowed())
+            {FlipTurnMode=priorMode;AllowRcsFlip=false;return false;}
+            BeginGyroControl();
+            return true;
+        }
         private void SelectTurnBank(double angle)
         {
             bool allowed=angle>30 && RcsTurnAllowed();
@@ -197,6 +210,7 @@ namespace ZeoNav
         internal Dictionary<MoveDir, List<Sandbox.ModAPI.IMyThrust>> ThrusterBanks { get { return thrusters; } }
         internal SignalBudget SignatureBudget;
         internal bool RcsOnly;
+        internal bool TrackTurnBank;
         internal static bool IsRcs(Sandbox.ModAPI.IMyThrust t)
         { return t != null && DriveClassifier.IsRcs(t.BlockDefinition.ToString(), t.DefinitionDisplayNameText, t.MaxThrust); }
         internal double RcsForce(MoveDir d)
@@ -926,7 +940,7 @@ namespace ZeoNav
 
         public void ReleaseGyros()
         {
-            bankTurn=false;rcsTurnActive=false;AllowRcsFlip=false;turnRequestDegPerSec=0;
+            bankTurn=false;rcsTurnActive=false;AllowRcsFlip=false;TrackTurnBank=false;turnRequestDegPerSec=0;
             aim.Reset();
 
             // Restore command state, then return touched RCS computers to enabled pilot control.
@@ -1056,7 +1070,7 @@ namespace ZeoNav
             Sandbox.ModAPI.IMyGyro g = rcsTurnActive ? null : EnsureActiveGyro();
             if(!rcsTurnActive && g==null)return false;
             Vector3D worldRate=Vector3D.Zero;
-            if(velocityKnown&&TurnAuthorityPolicy.FullBank(angle,toleranceDeg,angularVelocity.Length(),bankTurn||rcsTurnActive))
+            if(velocityKnown&&(TrackTurnBank||TurnAuthorityPolicy.FullBank(angle,toleranceDeg,angularVelocity.Length(),bankTurn||rcsTurnActive)))
             {
                 Vector3D forward=Controller.WorldMatrix.Forward;
                 var axis=Vector3D.Cross(forward,desiredForward);

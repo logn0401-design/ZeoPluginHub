@@ -8,8 +8,8 @@
     <LangVersion>latest</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <AssemblyVersion>1.1.23.0</AssemblyVersion>
-    <FileVersion>1.1.23.0</FileVersion>
+    <AssemblyVersion>1.1.25.0</AssemblyVersion>
+    <FileVersion>1.1.25.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.Runtime.Serialization" />
